@@ -173,9 +173,10 @@ const ManageArtistsView = ({ artists, setArtists }) => {
         }
 
         // Fix: Cast importedArtists to any[] to safely access properties on parsed JSON objects. This resolves errors on unknown types.
+        // Fix: Explicitly type `artist` as `any` to prevent TypeScript from inferring it as `unknown`.
         const validArtists = (importedArtists as any[])
-          .filter(artist => artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string')
-          .map(artist => ({ ...artist, name: artist.name.trim() }));
+          .filter((artist: any) => artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string')
+          .map((artist: any) => ({ ...artist, name: artist.name.trim() }));
 
         if (validArtists.length === 0) {
             alert("No valid artist data found in the file.");
