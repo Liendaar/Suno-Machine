@@ -191,13 +191,13 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
                 const existingArtist = artistMap.get(key);
 
                 if (existingArtist) {
-                    // FIX: The `typeof existingArtist === 'object'` check incorrectly narrowed the type to `object`,
-                    // preventing property access. The outer `if (existingArtist)` check is sufficient.
-                    // FIX: Cast existingArtist to `any` to prevent TypeScript errors when accessing properties
-                    // on what is inferred as an `unknown` type, and to allow object spreading.
-                    if ((existingArtist as any).style !== importedArtist.style) {
-                        artistMap.set(key, { ...(existingArtist as any), style: importedArtist.style });
-                        localUpdatedCount++;
+                    // FIX: Added type checks to safely handle potentially 'unknown' typed objects.
+                    // This resolves errors with property access and spread syntax.
+                    if (typeof existingArtist === 'object' && existingArtist !== null && 'style' in existingArtist) {
+                        if (existingArtist.style !== importedArtist.style) {
+                            artistMap.set(key, { ...existingArtist, style: importedArtist.style });
+                            localUpdatedCount++;
+                        }
                     }
                 } else {
                     artistMap.set(key, {
