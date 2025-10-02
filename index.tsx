@@ -327,6 +327,7 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
 const CreateSongView = ({ artists, ai }) => {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
+  const [isInstrumental, setIsInstrumental] = useState(false);
   const [songData, setSongData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -350,24 +351,73 @@ const CreateSongView = ({ artists, ai }) => {
     setSongData(null);
     setError(null);
     
-    let prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\n`;
-    prompt += `Your task is to generate a complete song concept that fits this artist.\n`;
-    prompt += `The musical style of the song should be INSPIRED BY the artist's main style, but with its own unique variation or twist. Do not simply repeat the artist's style.\n`;
+    let prompt;
+    let responseSchema;
 
-    if (comment) {
-      prompt += `Use the following idea or theme: "${comment}".\n`;
+    if (isInstrumental) {
+      prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\n`;
+      prompt += `Your task is to generate a complete CONCEPT FOR AN INSTRUMENTAL-ONLY song that fits this artist.\n`;
+      prompt += `The musical style of the song should be INSPIRED BY the artist's main style, but with its own unique variation or twist. Do not simply repeat the artist's style.\n`;
+
+      if (comment) {
+        prompt += `Use the following idea or theme for the instrumental's mood: "${comment}".\n`;
+      } else {
+        prompt += `The theme and mood must be completely new and original.\n`;
+      }
+
+      prompt += `The output must be a song concept with a title, a musical style description (MAXIMUM 250 characters), and a detailed structural description for Suno.\n`;
+      prompt += `CRITICAL RULE: The structural description in the 'lyrics' field MUST NOT contain any singable words or lyrics. It should only describe the musical sections, instruments, and arrangement.\n`;
+      prompt += `IMPORTANT: Format the structural description in a structure readable by Suno for instrumental tracks. This means including tags for song sections like [Intro], [Verse], [Chorus], [Bridge], [Outro], etc. and descriptive musical and instrumental cues in square brackets, for example: [soft piano intro with atmospheric pads] or [energetic synth lead over a driving bassline].\n\n`;
+
+      prompt += `Here is a perfect example of the required format for the structural description (to be placed in the 'lyrics' field):\n`;
+      prompt += `[Intro]
+[8 bars of atmospheric synth pads building up]
+[A simple, melancholic piano melody enters]
+
+[Verse]
+[The beat kicks in with a steady lo-fi drum machine]
+[A warm, deep bassline carries the harmony]
+[The piano melody continues, slightly more complex]
+
+[Chorus]
+[The energy lifts with layered synths and a soaring lead melody]
+[The drums become more powerful with a driving kick and snare]
+[A subtle string section adds emotional depth]
+
+[Outro]
+[The main elements fade out one by one, starting with the drums]
+[The song ends with the initial piano melody and a final, lingering synth pad chord]
+`;
+      
+      responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: "The title of the instrumental song." },
+          style: { type: Type.STRING, description: "The musical style of the song, inspired by the artist. Maximum 250 characters." },
+          lyrics: { type: Type.STRING, description: "A detailed structural description for an instrumental song, formatted for Suno. Must not contain any singable lyrics." },
+        },
+        required: ["title", "style", "lyrics"],
+      };
+
     } else {
-      prompt += `The theme and lyrics must be completely new and original, telling a different story from any previous request for this artist.\n`;
-    }
-    
-    prompt += `The output must be a song with a title, a musical style description (MAXIMUM 250 characters), and full lyrics.\n`;
-    prompt += `CRITICAL RULE: The lyrics MUST NOT mention the artist's name or the song's genre/style. The story and emotion should stand on their own.\n`;
-    prompt += `The lyrics must be in English unless another language is explicitly requested in the comment.\n\n`;
-    
-    prompt += `IMPORTANT: Format the lyrics in a structure readable by Suno. This means including tags for song sections like (Intro), [Verse 1], (Chorus), (Pre-Chorus), [Bridge], (Outro), etc. Also, include descriptive musical and instrumental cues in square brackets, for example: [soft piano intro] or [upbeat synth solo with heavy drums].\n\n`;
-    
-    prompt += `Here is a perfect example of the required lyrics format:\n`;
-    prompt += `(Intro)
+      prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\n`;
+      prompt += `Your task is to generate a complete song concept that fits this artist.\n`;
+      prompt += `The musical style of the song should be INSPIRED BY the artist's main style, but with its own unique variation or twist. Do not simply repeat the artist's style.\n`;
+
+      if (comment) {
+        prompt += `Use the following idea or theme: "${comment}".\n`;
+      } else {
+        prompt += `The theme and lyrics must be completely new and original, telling a different story from any previous request for this artist.\n`;
+      }
+      
+      prompt += `The output must be a song with a title, a musical style description (MAXIMUM 250 characters), and full lyrics.\n`;
+      prompt += `CRITICAL RULE: The lyrics MUST NOT mention the artist's name or the song's genre/style. The story and emotion should stand on their own.\n`;
+      prompt += `The lyrics must be in English unless another language is explicitly requested in the comment.\n\n`;
+      
+      prompt += `IMPORTANT: Format the lyrics in a structure readable by Suno. This means including tags for song sections like (Intro), [Verse 1], (Chorus), (Pre-Chorus), [Bridge], (Outro), etc. Also, include descriptive musical and instrumental cues in square brackets, for example: [soft piano intro] or [upbeat synth solo with heavy drums].\n\n`;
+      
+      prompt += `Here is a perfect example of the required lyrics format:\n`;
+      prompt += `(Intro)
 
 [2 bars – filtered funk guitar + handclaps; subby kick building; short brass stab cue. One-shot “Uh!” ad-lib.]
 (Verse 1)
@@ -460,6 +510,17 @@ I’m the heat you’re looking for
 (Post-Chorus / Hook)
 Heatwave—oh! (heatwave)
 `;
+      
+      responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: "The title of the song." },
+          style: { type: Type.STRING, description: "The musical style of the song, inspired by the artist. Maximum 250 characters." },
+          lyrics: { type: Type.STRING, description: "The full lyrics of the song, following Suno format. Must not contain the artist's name or genre." },
+        },
+        required: ["title", "style", "lyrics"],
+      };
+    }
 
     try {
       const response = await ai.models.generateContent({
@@ -467,15 +528,7 @@ Heatwave—oh! (heatwave)
         contents: prompt,
         config: {
           responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING, description: "The title of the song." },
-              style: { type: Type.STRING, description: "The musical style of the song, inspired by the artist. Maximum 250 characters." },
-              lyrics: { type: Type.STRING, description: "The full lyrics of the song, following Suno format. Must not contain the artist's name or genre." },
-            },
-            required: ["title", "style", "lyrics"],
-          },
+          responseSchema: responseSchema,
         },
       });
       
@@ -489,7 +542,7 @@ Heatwave—oh! (heatwave)
     } finally {
       setIsLoading(false);
     }
-  }, [selectedArtistId, comment, artists, ai]);
+  }, [selectedArtistId, comment, artists, ai, isInstrumental]);
   
   const handleCopy = useCallback(async (content, buttonId) => {
     const button = document.getElementById(buttonId);
@@ -525,6 +578,15 @@ Heatwave—oh! (heatwave)
           placeholder="Optional comment (e.g., a song about a lost city)"
           aria-label="Optional comment"
         />
+        <div className="instrumental-checkbox">
+            <input 
+              type="checkbox" 
+              id="instrumental" 
+              checked={isInstrumental} 
+              onChange={(e) => setIsInstrumental(e.target.checked)}
+            />
+            <label htmlFor="instrumental">Instrumental</label>
+          </div>
         <button className="btn btn-generate" onClick={handleGenerate} disabled={isLoading || artists.length === 0}>
           {isLoading ? 'Generating...' : '✨ Generate Song'}
         </button>

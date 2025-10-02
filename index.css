@@ -236,6 +236,27 @@ textarea::placeholder {
     opacity: 0.7;
 }
 
+.instrumental-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.instrumental-checkbox label {
+  color: var(--text-secondary-color);
+  cursor: pointer;
+}
+
+.instrumental-checkbox input[type="checkbox"] {
+  width: 1.2em;
+  height: 1.2em;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+
 .btn {
   font-family: inherit;
   font-weight: 700;
