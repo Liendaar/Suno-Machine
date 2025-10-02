@@ -256,6 +256,53 @@ textarea::placeholder {
   cursor: pointer;
 }
 
+.comment-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.comment-container input[type="text"] {
+  padding-right: 3.5rem; /* Make space for the button */
+}
+
+.btn-suggest {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--secondary-color);
+  color: var(--text-color);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: background-color 0.2s;
+}
+
+.btn-suggest:hover:not(:disabled) {
+  background-color: #4a4a4a;
+}
+
+.btn-suggest:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner-small {
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-left-color: var(--primary-color);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  animation: spin 1s linear infinite;
+}
 
 .btn {
   font-family: inherit;

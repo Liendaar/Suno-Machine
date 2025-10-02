@@ -330,6 +330,7 @@ const CreateSongView = ({ artists, ai }) => {
   const [isInstrumental, setIsInstrumental] = useState(false);
   const [songData, setSongData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -339,6 +340,35 @@ const CreateSongView = ({ artists, ai }) => {
         setSelectedArtistId("");
     }
   }, [artists, selectedArtistId]);
+  
+  const handleSuggestTheme = useCallback(async () => {
+    const selectedArtist = artists.find(a => a.id === Number(selectedArtistId));
+    if (!selectedArtist) {
+      setError("Please select an artist to get a theme suggestion.");
+      return;
+    }
+
+    setIsSuggesting(true);
+    setError(null);
+    
+    try {
+        const prompt = `You are a creative muse for songwriters. The artist is "${selectedArtist.name}" and their style is "${selectedArtist.style}". Generate a single, concise, and evocative song theme or concept. The theme should be a short phrase, perfect for inspiring a song. CRITICAL: The final output must start with either "a song about" or "a track about". Do not add any other preamble, explanation, or quotation marks. For example: "a song about a forgotten astronaut watching Earth from afar".`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        
+        const suggestedTheme = response.text.trim();
+        setComment(suggestedTheme);
+
+    } catch (e) {
+      console.error("Error suggesting theme:", e);
+      setError("Failed to suggest a theme. Please try again.");
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, [selectedArtistId, artists, ai]);
   
   const handleGenerate = useCallback(async () => {
     const selectedArtist = artists.find(a => a.id === Number(selectedArtistId));
@@ -367,7 +397,8 @@ const CreateSongView = ({ artists, ai }) => {
 
       prompt += `The output must be a song concept with a title, a musical style description (MAXIMUM 250 characters), and a detailed structural description for Suno.\n`;
       prompt += `CRITICAL RULE: The structural description in the 'lyrics' field MUST NOT contain any singable words or lyrics. It should only describe the musical sections, instruments, and arrangement.\n`;
-      prompt += `IMPORTANT: Format the structural description in a structure readable by Suno for instrumental tracks. This means including tags for song sections like [Intro], [Verse], [Chorus], [Bridge], [Outro], etc. and descriptive musical and instrumental cues in square brackets, for example: [soft piano intro with atmospheric pads] or [energetic synth lead over a driving bassline].\n\n`;
+      prompt += `IMPORTANT: Format the structural description in a structure readable by Suno for instrumental tracks. This means including tags for song sections like [Intro], [Verse], [Chorus], [Bridge], [Outro], etc. and descriptive musical and instrumental cues in square brackets, for example: [soft piano intro with atmospheric pads] or [energetic synth lead over a driving bassline].\n`;
+      prompt += `CRITICAL FORMATTING RULE: ALWAYS add a blank line between song sections (e.g., between the end of the [Intro] section and the start of the [Verse] section). This is mandatory for readability.\n\n`;
 
       prompt += `Here is a perfect example of the required format for the structural description (to be placed in the 'lyrics' field):\n`;
       prompt += `[Intro]
@@ -571,13 +602,27 @@ Heatwave—oh! (heatwave)
             artists.map(artist => <option key={artist.id} value={artist.id}>{artist.name}</option>)
           )}
         </select>
-        <input
-          type="text"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Optional comment (e.g., a song about a lost city)"
-          aria-label="Optional comment"
-        />
+        <div className="comment-container">
+          <input
+            type="text"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Optional comment (e.g., a song about a lost city)"
+            aria-label="Optional comment"
+          />
+           <button 
+              onClick={handleSuggestTheme} 
+              className="btn-suggest" 
+              title="Suggest a theme"
+              disabled={isSuggesting || artists.length === 0 || !selectedArtistId}
+          >
+              {isSuggesting ? (
+                  <div className="spinner-small"></div>
+              ) : (
+                  '💡'
+              )}
+          </button>
+        </div>
         <div className="instrumental-checkbox">
             <input 
               type="checkbox" 
