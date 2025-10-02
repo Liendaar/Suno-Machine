@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import { GoogleGenAI, Type } from "@google/genai";
 
 // --- Artist Management View ---
-const ManageArtistsView = ({ artists, setArtists }) => {
+const ManageArtistsView = ({ artists, setArtists, ai }) => {
   const [editingArtist, setEditingArtist] = useState(null);
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
@@ -16,8 +16,6 @@ const ManageArtistsView = ({ artists, setArtists }) => {
   const [aiComment, setAiComment] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const fileInputRef = useRef(null);
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   useEffect(() => {
     if (editingArtist) {
@@ -172,10 +170,11 @@ const ManageArtistsView = ({ artists, setArtists }) => {
           throw new Error("Invalid file format: must be a JSON array.");
         }
 
-        // Fix: Cast importedArtists to any[] to safely access properties on parsed JSON objects. This resolves errors on unknown types.
-        const validArtists = (importedArtists as any[])
-          .filter(artist => artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string')
-          .map(artist => ({ ...artist, name: artist.name.trim() }));
+        // After the Array.isArray check, we can safely iterate. We explicitly type `artist` as `any`
+        // in the callbacks to access its properties without TypeScript errors.
+        const validArtists = importedArtists
+          .filter((artist) => artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string')
+          .map((artist) => ({ ...artist, name: artist.name.trim() }));
 
         if (validArtists.length === 0) {
             alert("No valid artist data found in the file.");
@@ -187,14 +186,18 @@ const ManageArtistsView = ({ artists, setArtists }) => {
             let localAddedCount = 0;
             let localUpdatedCount = 0;
             
-            validArtists.forEach(importedArtist => {
+            validArtists.forEach((importedArtist) => {
                 const key = importedArtist.name.toLowerCase();
                 const existingArtist = artistMap.get(key);
 
                 if (existingArtist) {
-                    if (existingArtist.style !== importedArtist.style) {
-                        artistMap.set(key, { ...existingArtist, style: importedArtist.style });
-                        localUpdatedCount++;
+                    // FIX: Added type checks to safely handle potentially 'unknown' typed objects.
+                    // This resolves errors with property access and spread syntax.
+                    if (typeof existingArtist === 'object' && existingArtist !== null && 'style' in existingArtist) {
+                        if (existingArtist.style !== importedArtist.style) {
+                            artistMap.set(key, { ...existingArtist, style: importedArtist.style });
+                            localUpdatedCount++;
+                        }
                     }
                 } else {
                     artistMap.set(key, {
@@ -321,14 +324,12 @@ const ManageArtistsView = ({ artists, setArtists }) => {
 };
 
 // --- Create Song View ---
-const CreateSongView = ({ artists }) => {
+const CreateSongView = ({ artists, ai }) => {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
   const [songData, setSongData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   useEffect(() => {
     if (artists.length > 0 && !artists.some(a => String(a.id) === selectedArtistId)) {
@@ -488,7 +489,7 @@ Heatwave—oh! (heatwave)
     } finally {
       setIsLoading(false);
     }
-  }, [selectedArtistId, comment, artists]);
+  }, [selectedArtistId, comment, artists, ai]);
   
   const handleCopy = useCallback(async (content, buttonId) => {
     const button = document.getElementById(buttonId);
@@ -552,46 +553,127 @@ Heatwave—oh! (heatwave)
   );
 };
 
+const ApiKeyEntryView = ({ onApiKeySubmit }) => {
+  const [key, setKey] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (key.trim()) {
+      onApiKeySubmit(key.trim());
+    }
+  };
+
+  return (
+    <div className="api-key-entry-view">
+      <form onSubmit={handleSubmit} className="form-card">
+        <h3>Welcome to Suno Machine</h3>
+        <p>
+          Please enter your Google AI API key to begin. Your key will be stored
+          securely in your browser's local storage.
+        </p>
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="Paste your API key here"
+          aria-label="Google AI API Key"
+          required
+        />
+        <button type="submit" className="btn btn-primary">
+          Start Creating
+        </button>
+        <a 
+          href="https://aistudio.google.com/app/apikey" 
+          target="_blank" 
+          rel="noopener noreferrer"
+        >
+          Don't have a key? Get one from Google AI Studio
+        </a>
+      </form>
+    </div>
+  );
+};
+
 // --- Main App Component ---
 const App = () => {
   const [view, setView] = useState('create');
   const [artists, setArtists] = useState(() => {
-      try {
-        const savedArtists = localStorage.getItem('sunoArtists');
-        const parsed = savedArtists ? JSON.parse(savedArtists) : [];
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
+    try {
+      const savedArtists = localStorage.getItem('sunoArtists');
+      const parsed = savedArtists ? JSON.parse(savedArtists) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
+  const [ai, setAi] = useState(null);
 
   useEffect(() => {
-      localStorage.setItem('sunoArtists', JSON.stringify(artists));
+    localStorage.setItem('sunoArtists', JSON.stringify(artists));
   }, [artists]);
+
+  useEffect(() => {
+    const key = localStorage.getItem('google-api-key');
+    if (key) {
+      try {
+        setAi(new GoogleGenAI({ apiKey: key }));
+      } catch (e) {
+        console.error("Error initializing AI with saved key:", e);
+        localStorage.removeItem('google-api-key');
+      }
+    }
+  }, []);
+
+  const handleApiKeySubmit = (key) => {
+    try {
+      const newAi = new GoogleGenAI({ apiKey: key });
+      localStorage.setItem('google-api-key', key);
+      setAi(newAi);
+    } catch (e) {
+      alert('Invalid API key or initialization failed. Please check the console for details.');
+      console.error(e);
+    }
+  };
+  
+  const handleClearApiKey = () => {
+    localStorage.removeItem('google-api-key');
+    setAi(null);
+  };
 
   return (
     <main>
       <header>
-        <div className="logo">
+        <div className="header-content">
+          <div className="logo">
             <svg width="48" height="48" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="50" cy="50" r="48" stroke="currentColor" strokeWidth="4"/>
-                <path d="M20 50 Q 30 25, 40 50 T 60 50 T 80 50" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
+              <circle cx="50" cy="50" r="48" stroke="currentColor" strokeWidth="4"/>
+              <path d="M20 50 Q 30 25, 40 50 T 60 50 T 80 50" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
             </svg>
             <h1>Suno Machine</h1>
+          </div>
+          <p>Your AI-powered song creation studio</p>
         </div>
-        <p>Your AI-powered song creation studio</p>
+        {ai && (
+            <div className="header-actions">
+                <button onClick={handleClearApiKey} className="btn btn-clear-key">Clear API Key</button>
+            </div>
+        )}
       </header>
-
-      <nav className="view-switcher">
-        <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
-        <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
-      </nav>
-      
-      {view === 'create' ? <CreateSongView artists={artists} /> : <ManageArtistsView artists={artists} setArtists={setArtists}/>}
-
+      {!ai ? (
+        <ApiKeyEntryView onApiKeySubmit={handleApiKeySubmit} />
+      ) : (
+        <>
+          <nav className="view-switcher">
+            <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
+            <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
+          </nav>
+          {view === 'create' ? <CreateSongView artists={artists} ai={ai} /> : <ManageArtistsView artists={artists} setArtists={setArtists} ai={ai} />}
+        </>
+      )}
     </main>
   );
 };
+
 
 const ResultCard = ({ id, title, content, onCopy, isLarge = false }) => (
     <div id={id} className={`result-card ${isLarge ? 'large' : ''}`}>
