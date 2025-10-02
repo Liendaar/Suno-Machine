@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import { GoogleGenAI, Type } from "@google/genai";
 
 // --- Artist Management View ---
-const ManageArtistsView = ({ artists, setArtists }) => {
+const ManageArtistsView = ({ artists, setArtists, ai }) => {
   const [editingArtist, setEditingArtist] = useState(null);
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
@@ -16,8 +16,6 @@ const ManageArtistsView = ({ artists, setArtists }) => {
   const [aiComment, setAiComment] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const fileInputRef = useRef(null);
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   useEffect(() => {
     if (editingArtist) {
@@ -188,14 +186,19 @@ const ManageArtistsView = ({ artists, setArtists }) => {
             let localAddedCount = 0;
             let localUpdatedCount = 0;
             
-            validArtists.forEach(importedArtist => {
+            // Fix: Explicitly type `importedArtist` to avoid it being inferred as `unknown`.
+            // Also, add type checks for `existingArtist` to safely access its properties and use spread syntax.
+            validArtists.forEach((importedArtist: any) => {
                 const key = importedArtist.name.toLowerCase();
                 const existingArtist = artistMap.get(key);
 
                 if (existingArtist) {
-                    if (existingArtist.style !== importedArtist.style) {
-                        artistMap.set(key, { ...existingArtist, style: importedArtist.style });
-                        localUpdatedCount++;
+                    if (typeof existingArtist === 'object' && existingArtist !== null) {
+                        // Spread operator is now safe, and we cast to access the 'style' property.
+                        if ((existingArtist as any).style !== importedArtist.style) {
+                            artistMap.set(key, { ...existingArtist, style: importedArtist.style });
+                            localUpdatedCount++;
+                        }
                     }
                 } else {
                     artistMap.set(key, {
@@ -322,14 +325,12 @@ const ManageArtistsView = ({ artists, setArtists }) => {
 };
 
 // --- Create Song View ---
-const CreateSongView = ({ artists }) => {
+const CreateSongView = ({ artists, ai }) => {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
   const [songData, setSongData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   useEffect(() => {
     if (artists.length > 0 && !artists.some(a => String(a.id) === selectedArtistId)) {
@@ -489,7 +490,7 @@ Heatwave—oh! (heatwave)
     } finally {
       setIsLoading(false);
     }
-  }, [selectedArtistId, comment, artists]);
+  }, [selectedArtistId, comment, artists, ai]);
   
   const handleCopy = useCallback(async (content, buttonId) => {
     const button = document.getElementById(buttonId);
@@ -553,6 +554,18 @@ Heatwave—oh! (heatwave)
   );
 };
 
+const ApiKeyErrorView = () => (
+    <div className="api-key-error-view">
+        <h2>Configuration Error</h2>
+        <p>
+            The Google AI API key is not available. The application cannot connect to the generative AI service.
+        </p>
+        <p>
+            If you are the developer, please ensure the <code>API_KEY</code> environment variable is correctly configured for this deployment.
+        </p>
+    </div>
+);
+
 // --- Main App Component ---
 const App = () => {
   const [view, setView] = useState('create');
@@ -565,10 +578,47 @@ const App = () => {
         return [];
       }
   });
+  const [ai, setAi] = useState(null);
+  const [apiKeyError, setApiKeyError] = useState(false);
 
   useEffect(() => {
       localStorage.setItem('sunoArtists', JSON.stringify(artists));
   }, [artists]);
+
+  useEffect(() => {
+    try {
+      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+        setAi(new GoogleGenAI({ apiKey: process.env.API_KEY }));
+      } else {
+        console.warn("API_KEY environment variable not found.");
+        setApiKeyError(true);
+      }
+    } catch (e) {
+      console.error("Error checking for process.env.API_KEY:", e);
+      setApiKeyError(true);
+    }
+  }, []);
+
+  const renderContent = () => {
+    if (apiKeyError) {
+      return <ApiKeyErrorView />;
+    }
+    
+    if (!ai) {
+      // Render a loading spinner while the AI client initializes
+      return <div className="results-container" style={{padding:0}}><div className="spinner-overlay"><div className="spinner"></div></div></div>;
+    }
+
+    return (
+      <>
+        <nav className="view-switcher">
+          <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
+          <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
+        </nav>
+        {view === 'create' ? <CreateSongView artists={artists} ai={ai} /> : <ManageArtistsView artists={artists} setArtists={setArtists} ai={ai} />}
+      </>
+    );
+  };
 
   return (
     <main>
@@ -582,14 +632,7 @@ const App = () => {
         </div>
         <p>Your AI-powered song creation studio</p>
       </header>
-
-      <nav className="view-switcher">
-        <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
-        <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
-      </nav>
-      
-      {view === 'create' ? <CreateSongView artists={artists} /> : <ManageArtistsView artists={artists} setArtists={setArtists}/>}
-
+      {renderContent()}
     </main>
   );
 };
