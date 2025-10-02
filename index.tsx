@@ -170,9 +170,9 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
           throw new Error("Invalid file format: must be a JSON array.");
         }
 
-        // Fix: Cast importedArtists to any[] to safely access properties on parsed JSON objects. This resolves errors on unknown types.
-        // Fix: Explicitly type `artist` as `any` to prevent TypeScript from inferring it as `unknown`.
-        const validArtists = (importedArtists as any[])
+        // After the Array.isArray check, we can safely iterate. We explicitly type `artist` as `any`
+        // in the callbacks to access its properties without TypeScript errors.
+        const validArtists = importedArtists
           .filter((artist: any) => artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string')
           .map((artist: any) => ({ ...artist, name: artist.name.trim() }));
 
@@ -186,17 +186,18 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
             let localAddedCount = 0;
             let localUpdatedCount = 0;
             
-            // Fix: Explicitly type `importedArtist` to avoid it being inferred as `unknown`.
-            // Also, add type checks for `existingArtist` to safely access its properties and use spread syntax.
             validArtists.forEach((importedArtist: any) => {
                 const key = importedArtist.name.toLowerCase();
                 const existingArtist = artistMap.get(key);
 
                 if (existingArtist) {
                     if (typeof existingArtist === 'object' && existingArtist !== null) {
-                        // Spread operator is now safe, and we cast to access the 'style' property.
+                        // The `existingArtist` object is guaranteed to exist and have a `style` property here.
+                        // Fix: Cast `existingArtist` to `any` to access its properties.
+                        // The `typeof` check narrows its type to a generic `object`,
+                        // which prevents property access without a type assertion.
                         if ((existingArtist as any).style !== importedArtist.style) {
-                            artistMap.set(key, { ...existingArtist, style: importedArtist.style });
+                            artistMap.set(key, { ...(existingArtist as any), style: importedArtist.style });
                             localUpdatedCount++;
                         }
                     }
