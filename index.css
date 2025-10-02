@@ -1,0 +1,532 @@
+:root {
+  --background-color: #0d0d0d;
+  --card-color: rgba(26, 26, 26, 0.85);
+  --primary-color: #D800A6;
+  --primary-hover-color: #ff0dae;
+  --text-color: #f0f0f0;
+  --text-secondary-color: #a0a0a0;
+  --border-color: #333333;
+  --error-color: #f44336;
+  --danger-color: #e91e63;
+  --secondary-color: #2a2a2a;
+  --font-family: 'Inter', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--background-color);
+  color: var(--text-color);
+  line-height: 1.6;
+  padding: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* --- Parallax Background --- */
+@keyframes move-background {
+  from { background-position-y: 0; }
+  to   { background-position-y: -1024px; }
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.7);
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.25;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 0;
+  }
+}
+
+.parallax-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+#pulse-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150vmax;
+  height: 150vmax;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse at center, var(--primary-color) 0%, transparent 65%);
+  border-radius: 50%;
+  animation: pulse 12s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+.stars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+#stars1 {
+  background-image: radial-gradient(1px 1px at 10% 30%, rgba(255,255,255,0.8), transparent 100%),
+                    radial-gradient(1px 1px at 80% 20%, rgba(255,255,255,0.8), transparent 100%),
+                    radial-gradient(1px 1px at 50% 70%, rgba(255,255,255,0.8), transparent 100%);
+  background-size: 512px 512px;
+  animation: move-background 120s linear infinite;
+}
+
+#stars2 {
+  background-image: radial-gradient(1.5px 1.5px at 20% 80%, rgba(255,255,255,0.7), transparent 100%),
+                    radial-gradient(1.5px 1.5px at 90% 60%, rgba(255,255,255,0.7), transparent 100%);
+  background-size: 1024px 1024px;
+  background-position: 128px 128px;
+  animation: move-background 80s linear infinite;
+}
+
+#stars3 {
+  background-image: radial-gradient(2px 2px at 30% 50%, rgba(255,255,255,0.5), transparent 100%),
+                    radial-gradient(2px 2px at 70% 90%, rgba(255,255,255,0.5), transparent 100%);
+  background-size: 2048px 2048px;
+  background-position: 256px 256px;
+  animation: move-background 50s linear infinite;
+}
+
+
+#root {
+  width: 100%;
+  max-width: 900px;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+header {
+  text-align: center;
+}
+
+.logo {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.logo svg {
+    color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+header h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+header p {
+    font-size: 1.1rem;
+    color: var(--text-secondary-color);
+}
+
+.view-switcher {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    background-color: var(--card-color);
+    padding: 0.5rem;
+    border-radius: 50px;
+    backdrop-filter: blur(5px);
+}
+
+.view-switcher .btn {
+    background-color: transparent;
+    color: var(--text-secondary-color);
+    flex: 1;
+}
+
+.view-switcher .btn.active {
+    background-color: var(--primary-color);
+    color: var(--text-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background-color: var(--card-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(5px);
+}
+
+input[type="text"],
+textarea,
+select {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 1rem;
+    resize: vertical;
+    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+input[type="text"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(216, 0, 166, 0.3);
+}
+
+input[type="text"]::placeholder,
+textarea::placeholder {
+    color: var(--text-secondary-color);
+    opacity: 0.7;
+}
+
+.btn {
+  font-family: inherit;
+  font-weight: 700;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.btn-generate {
+  background-color: var(--primary-color);
+  color: var(--text-color);
+  font-size: 1.1rem;
+  padding: 0.8rem 2rem;
+}
+
+.btn-generate:hover:not(:disabled) {
+  background-color: var(--primary-hover-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error-message {
+    color: var(--error-color);
+    background-color: rgba(244, 67, 54, 0.1);
+    border: 1px solid var(--error-color);
+    padding: 1rem;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.results-container {
+    background-color: var(--card-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    min-height: 300px;
+    position: relative;
+    backdrop-filter: blur(5px);
+}
+
+.spinner-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(26, 26, 26, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    border-radius: 8px;
+}
+
+.placeholder-results {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    min-height: 250px;
+    color: var(--text-secondary-color);
+    font-size: 1.2rem;
+}
+
+.song-output {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+        "title style"
+        "lyrics lyrics";
+    gap: 1.5rem;
+}
+
+.result-card {
+    background-color: var(--background-color);
+    padding: 1rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+.result-card#title { grid-area: title; }
+.result-card#style { grid-area: style; }
+.result-card.large { grid-area: lyrics; }
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.result-header h2 {
+    font-size: 1.2rem;
+    color: var(--primary-color);
+}
+
+.btn-copy {
+    background-color: var(--border-color);
+    color: var(--text-secondary-color);
+    padding: 0.4rem 1rem;
+    flex-grow: 0;
+}
+
+.btn-copy:hover:not(:disabled) {
+    background-color: var(--secondary-color);
+    color: var(--text-color);
+}
+
+.btn-copy.copied {
+    background-color: var(--primary-color);
+    color: var(--text-color);
+}
+
+.result-content {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: var(--text-secondary-color);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.spinner {
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-left-color: var(--primary-color);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+}
+
+/* Manage Artists View */
+.manage-artists-view {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.form-card {
+    background-color: var(--card-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    backdrop-filter: blur(5px);
+}
+
+.form-card h3 {
+    color: var(--primary-color);
+    margin: 0;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.form-error {
+  color: var(--error-color);
+  background-color: rgba(244, 67, 54, 0.1);
+  border: 1px solid var(--error-color);
+  padding: 0.75rem;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.form-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-secondary-color);
+  margin: 0.5rem 0;
+}
+.form-divider::before,
+.form-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-color);
+}
+.form-divider span {
+  padding: 0 0.5em;
+}
+
+.ai-generation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: rgba(0,0,0,0.1);
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: var(--text-color);
+}
+.btn-primary:hover {
+    background-color: var(--primary-hover-color);
+}
+
+.btn-secondary {
+    background-color: var(--secondary-color);
+    color: var(--text-secondary-color);
+}
+.btn-secondary:hover {
+    background-color: #4a4a4a;
+    color: var(--text-color);
+}
+.btn-danger {
+    background-color: transparent;
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+}
+.btn-danger:hover {
+    background-color: var(--danger-color);
+    color: var(--text-color);
+}
+
+.btn-lucky {
+    flex-shrink: 0;
+}
+
+.artist-list {
+    background-color: var(--card-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(5px);
+}
+
+.artist-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.artist-list-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.artist-list h3 {
+    color: var(--primary-color);
+    margin-bottom: 0;
+}
+
+.artist-list ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.artist-list li {
+    background-color: var(--background-color);
+    padding: 1rem;
+    border-radius: 4px;
+    border-left: 3px solid var(--primary-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.artist-info p {
+    color: var(--text-secondary-color);
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+    white-space: pre-wrap;
+}
+
+.artist-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 600px) {
+    .logo {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    header h1 {
+        font-size: 2.5rem;
+    }
+    .song-output {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "title"
+            "style"
+            "lyrics";
+    }
+
+    .artist-list li {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .artist-actions {
+        margin-top: 1rem;
+    }
+}
