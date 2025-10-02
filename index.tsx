@@ -193,8 +193,10 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
                 if (existingArtist) {
                     // FIX: The `typeof existingArtist === 'object'` check incorrectly narrowed the type to `object`,
                     // preventing property access. The outer `if (existingArtist)` check is sufficient.
-                    if (existingArtist.style !== importedArtist.style) {
-                        artistMap.set(key, { ...existingArtist, style: importedArtist.style });
+                    // FIX: Cast existingArtist to `any` to prevent TypeScript errors when accessing properties
+                    // on what is inferred as an `unknown` type, and to allow object spreading.
+                    if ((existingArtist as any).style !== importedArtist.style) {
+                        artistMap.set(key, { ...(existingArtist as any), style: importedArtist.style });
                         localUpdatedCount++;
                     }
                 } else {
@@ -551,88 +553,127 @@ Heatwave—oh! (heatwave)
   );
 };
 
-const ApiKeyErrorView = () => (
-    <div className="api-key-error-view">
-        <h2>Configuration Error</h2>
+const ApiKeyEntryView = ({ onApiKeySubmit }) => {
+  const [key, setKey] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (key.trim()) {
+      onApiKeySubmit(key.trim());
+    }
+  };
+
+  return (
+    <div className="api-key-entry-view">
+      <form onSubmit={handleSubmit} className="form-card">
+        <h3>Welcome to Suno Machine</h3>
         <p>
-            The Google AI API key is not available. The application cannot connect to the generative AI service.
+          Please enter your Google AI API key to begin. Your key will be stored
+          securely in your browser's local storage.
         </p>
-        <p>
-            If you are the developer, please ensure the <code>API_KEY</code> environment variable is correctly configured for this deployment.
-        </p>
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="Paste your API key here"
+          aria-label="Google AI API Key"
+          required
+        />
+        <button type="submit" className="btn btn-primary">
+          Start Creating
+        </button>
+        <a 
+          href="https://aistudio.google.com/app/apikey" 
+          target="_blank" 
+          rel="noopener noreferrer"
+        >
+          Don't have a key? Get one from Google AI Studio
+        </a>
+      </form>
     </div>
-);
+  );
+};
 
 // --- Main App Component ---
 const App = () => {
   const [view, setView] = useState('create');
   const [artists, setArtists] = useState(() => {
-      try {
-        const savedArtists = localStorage.getItem('sunoArtists');
-        const parsed = savedArtists ? JSON.parse(savedArtists) : [];
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
+    try {
+      const savedArtists = localStorage.getItem('sunoArtists');
+      const parsed = savedArtists ? JSON.parse(savedArtists) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
   const [ai, setAi] = useState(null);
-  const [apiKeyError, setApiKeyError] = useState(false);
 
   useEffect(() => {
-      localStorage.setItem('sunoArtists', JSON.stringify(artists));
+    localStorage.setItem('sunoArtists', JSON.stringify(artists));
   }, [artists]);
 
   useEffect(() => {
-    try {
-      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-        setAi(new GoogleGenAI({ apiKey: process.env.API_KEY }));
-      } else {
-        console.warn("API_KEY environment variable not found.");
-        setApiKeyError(true);
+    const key = localStorage.getItem('google-api-key');
+    if (key) {
+      try {
+        setAi(new GoogleGenAI({ apiKey: key }));
+      } catch (e) {
+        console.error("Error initializing AI with saved key:", e);
+        localStorage.removeItem('google-api-key');
       }
-    } catch (e) {
-      console.error("Error checking for process.env.API_KEY:", e);
-      setApiKeyError(true);
     }
   }, []);
 
-  const renderContent = () => {
-    if (apiKeyError) {
-      return <ApiKeyErrorView />;
+  const handleApiKeySubmit = (key) => {
+    try {
+      const newAi = new GoogleGenAI({ apiKey: key });
+      localStorage.setItem('google-api-key', key);
+      setAi(newAi);
+    } catch (e) {
+      alert('Invalid API key or initialization failed. Please check the console for details.');
+      console.error(e);
     }
-    
-    if (!ai) {
-      // Render a loading spinner while the AI client initializes
-      return <div className="results-container" style={{padding:0}}><div className="spinner-overlay"><div className="spinner"></div></div></div>;
-    }
-
-    return (
-      <>
-        <nav className="view-switcher">
-          <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
-          <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
-        </nav>
-        {view === 'create' ? <CreateSongView artists={artists} ai={ai} /> : <ManageArtistsView artists={artists} setArtists={setArtists} ai={ai} />}
-      </>
-    );
+  };
+  
+  const handleClearApiKey = () => {
+    localStorage.removeItem('google-api-key');
+    setAi(null);
   };
 
   return (
     <main>
       <header>
-        <div className="logo">
+        <div className="header-content">
+          <div className="logo">
             <svg width="48" height="48" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="50" cy="50" r="48" stroke="currentColor" strokeWidth="4"/>
-                <path d="M20 50 Q 30 25, 40 50 T 60 50 T 80 50" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
+              <circle cx="50" cy="50" r="48" stroke="currentColor" strokeWidth="4"/>
+              <path d="M20 50 Q 30 25, 40 50 T 60 50 T 80 50" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
             </svg>
             <h1>Suno Machine</h1>
+          </div>
+          <p>Your AI-powered song creation studio</p>
         </div>
-        <p>Your AI-powered song creation studio</p>
+        {ai && (
+            <div className="header-actions">
+                <button onClick={handleClearApiKey} className="btn btn-clear-key">Clear API Key</button>
+            </div>
+        )}
       </header>
-      {renderContent()}
+      {!ai ? (
+        <ApiKeyEntryView onApiKeySubmit={handleApiKeySubmit} />
+      ) : (
+        <>
+          <nav className="view-switcher">
+            <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
+            <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
+          </nav>
+          {view === 'create' ? <CreateSongView artists={artists} ai={ai} /> : <ManageArtistsView artists={artists} setArtists={setArtists} ai={ai} />}
+        </>
+      )}
     </main>
   );
 };
+
 
 const ResultCard = ({ id, title, content, onCopy, isLarge = false }) => (
     <div id={id} className={`result-card ${isLarge ? 'large' : ''}`}>

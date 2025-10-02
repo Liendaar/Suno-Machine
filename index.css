@@ -119,7 +119,33 @@ main {
 
 header {
   text-align: center;
+  position: relative;
 }
+
+.header-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+.btn-clear-key {
+    background-color: var(--secondary-color);
+    color: var(--text-secondary-color);
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+}
+
+.btn-clear-key:hover {
+    background-color: var(--danger-color);
+    color: var(--text-color);
+}
+
 
 .logo {
     display: flex;
@@ -179,6 +205,7 @@ header p {
 }
 
 input[type="text"],
+input[type="password"],
 textarea,
 select {
     width: 100%;
@@ -194,6 +221,7 @@ select {
 }
 
 input[type="text"]:focus,
+input[type="password"]:focus,
 textarea:focus,
 select:focus {
     outline: none;
@@ -202,6 +230,7 @@ select:focus {
 }
 
 input[type="text"]::placeholder,
+input[type="password"]::placeholder,
 textarea::placeholder {
     color: var(--text-secondary-color);
     opacity: 0.7;
@@ -499,33 +528,42 @@ textarea::placeholder {
     flex-shrink: 0;
 }
 
-.api-key-error-view {
-    background-color: var(--card-color);
-    border: 1px solid var(--error-color);
-    padding: 2rem;
-    border-radius: 8px;
-    max-width: 600px;
-    margin: 0 auto;
-    text-align: center;
+.api-key-entry-view {
+  max-width: 500px;
+  margin: 2rem auto 0;
 }
 
-.api-key-error-view h2 {
-    color: var(--error-color);
-    margin-bottom: 1rem;
+.api-key-entry-view .form-card {
+  gap: 1.5rem;
 }
 
-.api-key-error-view p {
-    color: var(--text-secondary-color);
-    line-height: 1.6;
-    margin-bottom: 1rem;
+.api-key-entry-view p {
+  color: var(--text-secondary-color);
+  text-align: center;
+  line-height: 1.5;
+  font-size: 0.95rem;
 }
 
-.api-key-error-view code {
-    background-color: var(--secondary-color);
-    color: var(--primary-color);
-    padding: 0.2em 0.4em;
-    border-radius: 3px;
-    font-family: monospace;
+.api-key-entry-view input[type="password"] {
+  text-align: center;
+  font-family: monospace;
+}
+
+.api-key-entry-view .btn-primary {
+  width: 100%;
+}
+
+.api-key-entry-view a {
+  color: var(--text-secondary-color);
+  text-decoration: none;
+  font-size: 0.85rem;
+  text-align: center;
+  transition: color 0.2s ease;
+}
+
+.api-key-entry-view a:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
 }
 
 
@@ -556,6 +594,11 @@ textarea::placeholder {
         align-items: flex-start;
     }
     .artist-actions {
+        margin-top: 1rem;
+    }
+    
+    .header-actions {
+        position: static;
         margin-top: 1rem;
     }
 }
