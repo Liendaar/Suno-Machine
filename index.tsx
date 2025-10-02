@@ -173,8 +173,8 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
         // After the Array.isArray check, we can safely iterate. We explicitly type `artist` as `any`
         // in the callbacks to access its properties without TypeScript errors.
         const validArtists = importedArtists
-          .filter((artist: any) => artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string')
-          .map((artist: any) => ({ ...artist, name: artist.name.trim() }));
+          .filter((artist) => artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string')
+          .map((artist) => ({ ...artist, name: artist.name.trim() }));
 
         if (validArtists.length === 0) {
             alert("No valid artist data found in the file.");
@@ -186,20 +186,16 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
             let localAddedCount = 0;
             let localUpdatedCount = 0;
             
-            validArtists.forEach((importedArtist: any) => {
+            validArtists.forEach((importedArtist) => {
                 const key = importedArtist.name.toLowerCase();
                 const existingArtist = artistMap.get(key);
 
                 if (existingArtist) {
-                    if (typeof existingArtist === 'object' && existingArtist !== null) {
-                        // The `existingArtist` object is guaranteed to exist and have a `style` property here.
-                        // Fix: Cast `existingArtist` to `any` to access its properties.
-                        // The `typeof` check narrows its type to a generic `object`,
-                        // which prevents property access without a type assertion.
-                        if ((existingArtist as any).style !== importedArtist.style) {
-                            artistMap.set(key, { ...(existingArtist as any), style: importedArtist.style });
-                            localUpdatedCount++;
-                        }
+                    // FIX: The `typeof existingArtist === 'object'` check incorrectly narrowed the type to `object`,
+                    // preventing property access. The outer `if (existingArtist)` check is sufficient.
+                    if (existingArtist.style !== importedArtist.style) {
+                        artistMap.set(key, { ...existingArtist, style: importedArtist.style });
+                        localUpdatedCount++;
                     }
                 } else {
                     artistMap.set(key, {
