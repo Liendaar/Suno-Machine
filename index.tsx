@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import { GoogleGenAI, Type } from "@google/genai";
 
 // --- Artist Management View ---
-const ManageArtistsView = ({ artists, setArtists, ai }) => {
+const ManageArtistsView = ({ artists, setArtists, ai, generationHistory, setGenerationHistory }) => {
   const [editingArtist, setEditingArtist] = useState(null);
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
@@ -16,6 +16,7 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
   const [aiComment, setAiComment] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const fileInputRef = useRef(null);
+  const historyFileInputRef = useRef(null);
 
   useEffect(() => {
     if (editingArtist) {
@@ -64,8 +65,13 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this artist?")) {
+    if (window.confirm("Are you sure you want to delete this artist? This will also delete their generation history.")) {
       setArtists(prev => prev.filter((a) => a.id !== id));
+      setGenerationHistory(prev => {
+        const newHistory = { ...prev };
+        delete newHistory[id];
+        return newHistory;
+      });
       if (editingArtist && editingArtist.id === id) {
         setEditingArtist(null);
       }
@@ -225,6 +231,62 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
     reader.readAsText(file);
   };
 
+  const handleExportHistory = () => {
+    if (Object.keys(generationHistory).length === 0) return;
+    const jsonString = JSON.stringify(generationHistory, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'suno_history_backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportHistoryClick = () => {
+    historyFileInputRef.current?.click();
+  };
+
+  const handleHistoryFileSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (historyFileInputRef.current) {
+        historyFileInputRef.current.value = "";
+      }
+
+      if (!window.confirm('This will merge the imported history with your current history. Existing artist histories in the file will be overwritten. Continue?')) {
+        return;
+      }
+
+      try {
+        const text = e.target.result;
+        if (typeof text !== 'string') throw new Error("File could not be read as text.");
+
+        const importedHistory = JSON.parse(text);
+
+        if (typeof importedHistory !== 'object' || importedHistory === null || Array.isArray(importedHistory)) {
+          throw new Error("Invalid file format: must be a JSON object.");
+        }
+
+        setGenerationHistory(prev => ({...prev, ...importedHistory}));
+
+        setTimeout(() => {
+          alert(`History import complete. Data for ${Object.keys(importedHistory).length} artists was imported.`);
+        }, 0);
+
+      } catch (error) {
+        console.error("History import failed:", error);
+        alert(`Error importing history file: ${error.message}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="manage-artists-view">
       <div className="form-card">
@@ -286,7 +348,7 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
             <h3>Your Artists</h3>
             <div className="artist-list-actions">
                 <button className="btn btn-secondary" onClick={handleImportClick}>
-                    Import
+                    Import Artists
                 </button>
                 <input
                     type="file"
@@ -296,7 +358,20 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
                     accept=".json"
                 />
                 <button className="btn btn-secondary" onClick={handleExport} disabled={artists.length === 0}>
-                    Export
+                    Export Artists
+                </button>
+                <button className="btn btn-secondary" onClick={handleImportHistoryClick}>
+                    Import History
+                </button>
+                <input
+                    type="file"
+                    ref={historyFileInputRef}
+                    onChange={handleHistoryFileSelect}
+                    style={{ display: "none" }}
+                    accept=".json"
+                />
+                <button className="btn btn-secondary" onClick={handleExportHistory} disabled={Object.keys(generationHistory).length === 0}>
+                    Export History
                 </button>
             </div>
         </div>
@@ -324,14 +399,23 @@ const ManageArtistsView = ({ artists, setArtists, ai }) => {
 };
 
 // --- Create Song View ---
-const CreateSongView = ({ artists, ai }) => {
+const CreateSongView = ({ artists, ai, generationHistory, setGenerationHistory }) => {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
   const [isInstrumental, setIsInstrumental] = useState(false);
+  const [creativity, setCreativity] = useState(25);
   const [songData, setSongData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [error, setError] = useState(null);
+  
+  const creativityLevels = {
+    0: 'Identical',
+    25: 'Subtle',
+    50: 'Inspired',
+    75: 'Experimental',
+    100: 'Wildcard',
+  };
 
   useEffect(() => {
     if (artists.length > 0 && !artists.some(a => String(a.id) === selectedArtistId)) {
@@ -352,7 +436,12 @@ const CreateSongView = ({ artists, ai }) => {
     setError(null);
     
     try {
-        const prompt = `You are a creative muse for songwriters. The artist is "${selectedArtist.name}" and their style is "${selectedArtist.style}". Generate a single, concise, and evocative song theme or concept. The theme should be a short phrase, perfect for inspiring a song. CRITICAL: The final output must start with either "a song about" or "a track about". Do not add any other preamble, explanation, or quotation marks. For example: "a song about a forgotten astronaut watching Earth from afar".`;
+        const artistHistory = generationHistory[selectedArtistId] || {};
+        let prompt = `You are a creative muse for songwriters. The artist is "${selectedArtist.name}" and their style is "${selectedArtist.style}". Generate a single, concise, and evocative song theme or concept. The theme should be a short phrase, perfect for inspiring a song. CRITICAL: The final output must start with either "a song about" or "a track about". Do not add any other preamble, explanation, or quotation marks. For example: "a song about a forgotten astronaut watching Earth from afar".`;
+        
+        if (artistHistory.themes?.length > 0) {
+            prompt += `\n\nIMPORTANT: Avoid themes similar to these past suggestions for this artist: "${artistHistory.themes.join('", "')}". Be original.`;
+        }
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
@@ -361,6 +450,16 @@ const CreateSongView = ({ artists, ai }) => {
         
         const suggestedTheme = response.text.trim();
         setComment(suggestedTheme);
+        
+        setGenerationHistory(prev => {
+            const newHistory = { ...prev };
+            const artistId = selectedArtist.id;
+            if (!newHistory[artistId]) {
+                newHistory[artistId] = { titles: [], themes: [], lyrics: [] };
+            }
+            newHistory[artistId].themes.push(suggestedTheme);
+            return newHistory;
+        });
 
     } catch (e) {
       console.error("Error suggesting theme:", e);
@@ -368,7 +467,7 @@ const CreateSongView = ({ artists, ai }) => {
     } finally {
       setIsSuggesting(false);
     }
-  }, [selectedArtistId, artists, ai]);
+  }, [selectedArtistId, artists, ai, generationHistory, setGenerationHistory]);
   
   const handleGenerate = useCallback(async () => {
     const selectedArtist = artists.find(a => a.id === Number(selectedArtistId));
@@ -381,19 +480,52 @@ const CreateSongView = ({ artists, ai }) => {
     setSongData(null);
     setError(null);
     
+    const getCreativityInstruction = (level) => {
+        switch (level) {
+            case 0:
+                return `The musical style of the song MUST be "Identical" to: "${selectedArtist.style}". Do not deviate or add any other stylistic elements.`;
+            case 25:
+                return `The musical style should be "Subtle". It must be very close to "${selectedArtist.style}", but with a single, subtle new element. For example, add a slightly different rhythmic feel or a new, complementary instrument, while keeping the core identity intact.`;
+            case 50:
+                return `The musical style should be "Inspired". It must be inspired by "${selectedArtist.style}", but feel free to add a unique twist or variation. It should be recognizable as the artist, but clearly a new take on their sound. This is the default creative level.`;
+            case 75:
+                return `The musical style must be an "Experimental" FUSION. Start with the artist's core style ("${selectedArtist.style}"), and blend it with a surprising but coherent genre. For example, if the artist is 'Synthwave', you could blend it with 'Sea Shanty' or 'Baroque'. Be creative and bold.`;
+            case 100:
+                return `The musical style should be a "Wildcard". Take the artist's core style ("${selectedArtist.style}") as a distant starting point and create something wildly experimental and avant-garde. The connection to the original style might be abstract or purely conceptual. This is a chance for a completely unpredictable and high-concept result.`;
+            default:
+                return `The musical style should be INSPIRED BY "${selectedArtist.style}", but with its own unique variation or twist. It should be recognizable as the artist, but clearly a new take on their sound.`;
+        }
+    };
+
+    const creativityInstruction = getCreativityInstruction(creativity);
+    const artistHistory = generationHistory[selectedArtistId] || {};
+    let historyConstraints = "";
+    if (artistHistory.titles?.length > 0) {
+        historyConstraints += `\n\nCRITICAL: Be creative and original. Avoid generating a song concept similar to these past titles for this artist: "${artistHistory.titles.join('", "')}".`;
+    }
+    if (artistHistory.lyrics?.length > 0) {
+        const lyricSnippets = artistHistory.lyrics.map(lyric => {
+             const cleaned = lyric.replace(/\[.*?\]|\(.*?\)/g, ' ').replace(/\s+/g, ' ').trim();
+             return cleaned.substring(0, 150);
+        }).join('"; "');
+        historyConstraints += `\nAlso avoid lyrical themes or concepts similar to these previous songs: "${lyricSnippets}".`;
+    }
+    
     let prompt;
     let responseSchema;
 
     if (isInstrumental) {
       prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\n`;
       prompt += `Your task is to generate a complete CONCEPT FOR AN INSTRUMENTAL-ONLY song that fits this artist.\n`;
-      prompt += `The musical style of the song should be INSPIRED BY the artist's main style, but with its own unique variation or twist. Do not simply repeat the artist's style.\n`;
+      prompt += `${creativityInstruction}\n`;
 
       if (comment) {
         prompt += `Use the following idea or theme for the instrumental's mood: "${comment}".\n`;
       } else {
         prompt += `The theme and mood must be completely new and original.\n`;
       }
+      
+      prompt += historyConstraints;
 
       prompt += `The output must be a song concept with a title, a musical style description (MAXIMUM 250 characters), and a detailed structural description for Suno.\n`;
       prompt += `CRITICAL RULE: The structural description in the 'lyrics' field MUST NOT contain any singable words or lyrics. It should only describe the musical sections, instruments, and arrangement.\n`;
@@ -433,7 +565,7 @@ const CreateSongView = ({ artists, ai }) => {
     } else {
       prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\n`;
       prompt += `Your task is to generate a complete song concept that fits this artist.\n`;
-      prompt += `The musical style of the song should be INSPIRED BY the artist's main style, but with its own unique variation or twist. Do not simply repeat the artist's style.\n`;
+      prompt += `${creativityInstruction}\n`;
 
       if (comment) {
         prompt += `Use the following idea or theme: "${comment}".\n`;
@@ -441,16 +573,20 @@ const CreateSongView = ({ artists, ai }) => {
         prompt += `The theme and lyrics must be completely new and original, telling a different story from any previous request for this artist.\n`;
       }
       
+      prompt += historyConstraints;
+      
       prompt += `The output must be a song with a title, a musical style description (MAXIMUM 250 characters), and full lyrics.\n`;
       prompt += `CRITICAL RULE: The lyrics MUST NOT mention the artist's name or the song's genre/style. The story and emotion should stand on their own.\n`;
       prompt += `The lyrics must be in English unless another language is explicitly requested in the comment.\n\n`;
       
-      prompt += `IMPORTANT: Format the lyrics in a structure readable by Suno. This means including tags for song sections like (Intro), [Verse 1], (Chorus), (Pre-Chorus), [Bridge], (Outro), etc. Also, include descriptive musical and instrumental cues in square brackets, for example: [soft piano intro] or [upbeat synth solo with heavy drums].\n\n`;
+      prompt += `IMPORTANT: Format the lyrics in a structure readable by Suno. This means including tags for song sections like (Intro), [Verse 1], (Chorus), (Pre-Chorus), [Bridge], (Outro), etc. Also, include descriptive musical and instrumental cues in square brackets, for example: [soft piano intro] or [upbeat synth solo with heavy drums].\n`;
+      prompt += `CRITICAL FORMATTING RULE: ALWAYS add a blank line between song sections (e.g., between the end of the (Chorus) section and the start of the [Verse 2] section). This is mandatory for readability.\n\n`;
       
       prompt += `Here is a perfect example of the required lyrics format:\n`;
       prompt += `(Intro)
 
 [2 bars – filtered funk guitar + handclaps; subby kick building; short brass stab cue. One-shot “Uh!” ad-lib.]
+
 (Verse 1)
 I walk in slow, gold hoops, midnight glitter
 Beat says “go,” my pulse moves quicker
@@ -460,11 +596,13 @@ Side-eye sparkle, sugar on the lips
 Bassline talking, hands on the hips
 If you want the fire, say my name right now
 I turn the room to a holy vow
+
 (Pre-Chorus)
 Hands up (hey), bass low (hey)
 Lights down—here we go
 Can’t fake what we came here for
 One spark, then we’re wanting more
+
 (Chorus)
 I put the fever on the floor
 Turn you up and give you more
@@ -474,11 +612,13 @@ I put the fever on the floor
 From the ceiling to the door
 You can’t fight it, don’t ignore—
 I’m the heat you’re looking for
+
 (Post-Chorus / Hook)
 Heatwave—oh! (heatwave)
 Make your heartbeat misbehave
 Heatwave—yeah! (heatwave)
 Let the heavy beat pave the way
+
 (Verse 2)
 Velvet thunder, 808s collide
 Rhythm like a taxi, “Baby, get inside”
@@ -488,6 +628,7 @@ Little bit of trouble in a cherry gloss
 Turn a quiet Tuesday to a total boss
 If you feel the fever, better lean in close—
 I’m a one-girl party and the world’s my host
+
 (Optional Rap – same singer)
 Tap in—heels click, metronome killer,
 Independent credit, I’m the headline filler,
@@ -497,11 +638,13 @@ No cap—clap track, double-time hi-hat,
 Bass got a face like “who did that?”
 Glow so loud it invades your shade—
 I sell out silence with the noise I made.
+
 (Pre-Chorus)
 Hands up (hey), bass low (hey)
 Lights down—here we go
 Can’t fake what we came here for
 One spark, then we’re wanting more
+
 (Chorus)
 I put the fever on the floor
 Turn you up and give you more
@@ -528,6 +671,7 @@ I put the fever on the floor
 From the ceiling to the door
 You can’t fight it, don’t ignore—
 I’m the heat you’re looking for
+
 (Post-Chorus / Hook)
 Heatwave—oh! (heatwave)
 I put the fever on the floor
@@ -538,6 +682,7 @@ I put the fever on the floor
 From the ceiling to the door
 You can’t fight it, don’t ignore—
 I’m the heat you’re looking for
+
 (Post-Chorus / Hook)
 Heatwave—oh! (heatwave)
 `;
@@ -566,6 +711,17 @@ Heatwave—oh! (heatwave)
       const responseText = response.text.trim();
       const parsedData = JSON.parse(responseText);
       setSongData(parsedData);
+      
+      setGenerationHistory(prev => {
+        const newHistory = { ...prev };
+        const artistId = selectedArtist.id;
+        if (!newHistory[artistId]) {
+            newHistory[artistId] = { titles: [], themes: [], lyrics: [] };
+        }
+        newHistory[artistId].titles.push(parsedData.title);
+        newHistory[artistId].lyrics.push(parsedData.lyrics);
+        return newHistory;
+      });
 
     } catch (e) {
       console.error("Error generating song:", e);
@@ -573,7 +729,7 @@ Heatwave—oh! (heatwave)
     } finally {
       setIsLoading(false);
     }
-  }, [selectedArtistId, comment, artists, ai, isInstrumental]);
+  }, [selectedArtistId, comment, artists, ai, isInstrumental, generationHistory, setGenerationHistory, creativity]);
   
   const handleCopy = useCallback(async (content, buttonId) => {
     const button = document.getElementById(buttonId);
@@ -631,7 +787,19 @@ Heatwave—oh! (heatwave)
               onChange={(e) => setIsInstrumental(e.target.checked)}
             />
             <label htmlFor="instrumental">Instrumental</label>
-          </div>
+        </div>
+        <div className="creativity-slider-container">
+            <label htmlFor="creativity">Creativity Level: <span className="creativity-level-label">{creativityLevels[creativity]}</span></label>
+            <input
+                type="range"
+                id="creativity"
+                min="0"
+                max="100"
+                step="25"
+                value={creativity}
+                onChange={(e) => setCreativity(Number(e.target.value))}
+            />
+        </div>
         <button className="btn btn-generate" onClick={handleGenerate} disabled={isLoading || artists.length === 0}>
           {isLoading ? 'Generating...' : '✨ Generate Song'}
         </button>
@@ -713,11 +881,23 @@ const App = () => {
       return [];
     }
   });
+  const [generationHistory, setGenerationHistory] = useState(() => {
+    try {
+      const savedHistory = localStorage.getItem('sunoGenerationHistory');
+      return savedHistory ? JSON.parse(savedHistory) : {};
+    } catch {
+      return {};
+    }
+  });
   const [ai, setAi] = useState(null);
 
   useEffect(() => {
     localStorage.setItem('sunoArtists', JSON.stringify(artists));
   }, [artists]);
+
+  useEffect(() => {
+    localStorage.setItem('sunoGenerationHistory', JSON.stringify(generationHistory));
+  }, [generationHistory]);
 
   useEffect(() => {
     const key = localStorage.getItem('google-api-key');
@@ -774,7 +954,7 @@ const App = () => {
             <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
             <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
           </nav>
-          {view === 'create' ? <CreateSongView artists={artists} ai={ai} /> : <ManageArtistsView artists={artists} setArtists={setArtists} ai={ai} />}
+          {view === 'create' ? <CreateSongView artists={artists} ai={ai} generationHistory={generationHistory} setGenerationHistory={setGenerationHistory} /> : <ManageArtistsView artists={artists} setArtists={setArtists} ai={ai} generationHistory={generationHistory} setGenerationHistory={setGenerationHistory} />}
         </>
       )}
     </main>
