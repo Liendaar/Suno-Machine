@@ -631,6 +631,7 @@ const App = () => {
   const [db, setDb] = useState<Firestore | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [ai, setAi] = useState<GoogleGenAI | null>(null);
 
@@ -656,35 +657,45 @@ const App = () => {
   
   // Handle Google sign-in redirect result
   useEffect(() => {
-    if (!auth || !db) return;
-  
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result) {
-          // This is the sign-in result.
-          const user = result.user;
-          const userDocRef = doc(db, "users", user.uid);
-          
-          // Check if the user document already exists.
-          getDoc(userDocRef).then(docSnap => {
-            if (!docSnap.exists() && user.displayName && user.email) {
-              // New user via Google, create their profile.
-              setDoc(userDocRef, {
-                artists: [],
-                generationHistory: {},
-                displayName: user.displayName,
-                email: user.email.toLowerCase()
-              });
-            }
-          });
+    if (!auth || !db) {
+        // If Firebase isn't initialized, we can't process a redirect.
+        // If we know there's no config, we can stop waiting.
+        if (!firebaseConfig) {
+            setIsProcessingRedirect(false);
         }
-      })
-      .catch((error) => {
-        // Handle errors from the redirect.
-        console.error("Google Redirect Sign-In Error:", error);
-      });
-  
-  }, [auth, db]);
+        return;
+    }
+    
+    const processRedirect = async () => {
+        try {
+            const result = await getRedirectResult(auth);
+            if (result) {
+                // User has successfully signed in.
+                const user = result.user;
+                const userDocRef = doc(db, "users", user.uid);
+                const docSnap = await getDoc(userDocRef);
+
+                // If the user document doesn't exist, this is their first sign-in.
+                // Create their profile in Firestore.
+                if (!docSnap.exists() && user.displayName && user.email) {
+                    await setDoc(userDocRef, {
+                        artists: [],
+                        generationHistory: {},
+                        displayName: user.displayName,
+                        email: user.email.toLowerCase()
+                    });
+                }
+            }
+        } catch (error) {
+            console.error("Google Redirect Sign-In Error:", error);
+        } finally {
+            // No matter the outcome, we are done processing the redirect attempt.
+            setIsProcessingRedirect(false);
+        }
+    };
+    
+    processRedirect();
+  }, [auth, db, firebaseConfig]);
 
   // Listen for auth state changes
   useEffect(() => {
@@ -807,26 +818,26 @@ const App = () => {
   };
   
   const renderContent = () => {
-    // Show a spinner while checking auth state or loading initial data
-    if (authLoading || (user && dataLoading)) {
+    // Show a spinner while checking the initial auth state or processing a sign-in redirect.
+    if (authLoading || isProcessingRedirect) {
       return <div className="spinner-overlay"><div className="spinner"></div></div>;
     }
 
-    // If not authenticated, show the AuthView
+    // If not authenticated, show the AuthView.
     if (!user) {
       if (!auth || !db) {
-        // This prevents passing a null auth object if Firebase is still initializing
+        // This case is unlikely with the new loading logic but acts as a safeguard.
         return <div className="spinner-overlay"><div className="spinner"></div></div>;
       }
       return <AuthView auth={auth} db={db} />;
     }
 
-    // If authenticated but AI is not ready yet, show spinner
-    if (!ai) {
+    // If authenticated, but user data or AI is still loading, show a spinner.
+    if (dataLoading || !ai) {
         return <div className="spinner-overlay"><div className="spinner"></div></div>;
     }
 
-    // User is logged in, data is loaded, and AI is ready
+    // User is logged in, data is loaded, and AI is ready.
     return (
       <>
         <nav className="view-switcher">
