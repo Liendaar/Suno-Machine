@@ -37,7 +37,6 @@ interface GenerationHistory {
   [key: string]: GenerationHistoryItem;
 }
 
-
 // --- Hardcoded Firebase Configuration ---
 const PRECONFIGURED_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCSr33LMZPgm2V6uqhedH8VVdltg4pY0OQ",
@@ -57,8 +56,6 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
   const [formError, setFormError] = useState("");
   const [aiComment, setAiComment] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const historyFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editingArtist) {
@@ -172,150 +169,6 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
       setIsGenerating(false);
     }
   };
-  
-  const handleExport = () => {
-    if (artists.length === 0) return;
-    const jsonString = JSON.stringify(artists, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'suno_artists_backup.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-  
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-  
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      if (!window.confirm('This will update existing artists and add new ones from the file. Do you want to continue?')) return;
-      try {
-        const text = e.target?.result;
-        if (typeof text !== 'string') throw new Error("File could not be read as text.");
-        
-        const importedData: unknown = JSON.parse(text);
-        if (!Array.isArray(importedData)) throw new Error("Invalid file format: must be a JSON array.");
-        
-        const validArtists: Artist[] = importedData.reduce((acc: Artist[], artist: any) => {
-          if (artist && typeof artist.name === 'string' && artist.name.trim() !== '' && typeof artist.style === 'string') {
-            acc.push({ 
-              id: artist.id ?? Date.now() + Math.random(),
-              name: artist.name.trim(),
-              style: artist.style 
-            });
-          }
-          return acc;
-        }, []);
-
-        if (validArtists.length === 0) {
-            alert("No valid artist data found in the file.");
-            return;
-        }
-        
-        const artistMap = new Map(artists.map(a => [a.name.toLowerCase(), a]));
-        let localAddedCount = 0;
-        let localUpdatedCount = 0;
-        
-        validArtists.forEach((importedArtist) => {
-            const key = importedArtist.name.toLowerCase();
-            const existingArtist = artistMap.get(key);
-            if (existingArtist) {
-                if (existingArtist.style !== importedArtist.style) {
-                    artistMap.set(key, { ...existingArtist, style: importedArtist.style });
-                    localUpdatedCount++;
-                }
-            } else {
-                artistMap.set(key, importedArtist);
-                localAddedCount++;
-            }
-        });
-        
-        updateArtists(Array.from(artistMap.values()));
-        setTimeout(() => {
-            alert(`Import complete. ${localAddedCount} new artists added. ${localUpdatedCount} artists updated.`);
-        }, 0);
-      } catch (error) {
-          console.error("Import failed:", error);
-          alert(`Error importing file: ${error.message}`);
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleExportHistory = () => {
-    if (Object.keys(generationHistory).length === 0) return;
-    const jsonString = JSON.stringify(generationHistory, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'suno_history_backup.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImportHistoryClick = () => {
-    historyFileInputRef.current?.click();
-  };
-
-  const handleHistoryFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (historyFileInputRef.current) historyFileInputRef.current.value = "";
-      if (!window.confirm('This will merge the imported history with your current history. Existing artist histories in the file will be overwritten. Continue?')) return;
-      try {
-        const text = e.target?.result;
-        if (typeof text !== 'string') throw new Error("File could not be read as text.");
-        
-        const importedHistory: unknown = JSON.parse(text);
-        if (typeof importedHistory !== 'object' || importedHistory === null || Array.isArray(importedHistory)) {
-          throw new Error("Invalid file format: must be a JSON object.");
-        }
-
-        const validatedHistory: GenerationHistory = {};
-        let importedCount = 0;
-        // Fix: Cast importedHistory to Record<string, any> to allow safe iteration.
-        // This resolves issues where properties were accessed on an 'unknown' type and ensures the object can be spread.
-        for (const key in (importedHistory as Record<string, any>)) {
-            if (Object.prototype.hasOwnProperty.call(importedHistory, key)) {
-                const item = (importedHistory as Record<string, any>)[key];
-                if (item && Array.isArray(item.titles) && Array.isArray(item.themes) && Array.isArray(item.lyrics)) {
-                   validatedHistory[key] = {
-                     titles: item.titles.filter((t: any) => typeof t === 'string'),
-                     themes: item.themes.filter((t: any) => typeof t === 'string'),
-                     lyrics: item.lyrics.filter((l: any) => typeof l === 'string'),
-                   };
-                   importedCount++;
-                }
-            }
-        }
-        
-        updateGenerationHistory({...generationHistory, ...validatedHistory});
-        setTimeout(() => {
-          alert(`History import complete. Data for ${importedCount} artists was imported/updated.`);
-        }, 0);
-      } catch (error) {
-        console.error("History import failed:", error);
-        alert(`Error importing history file: ${error.message}`);
-      }
-    };
-    reader.readAsText(file);
-  };
 
   return (
     <div className="manage-artists-view">
@@ -373,34 +226,6 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
       <div className="artist-list">
         <div className="artist-list-header">
             <h3>Your Artists</h3>
-            <div className="artist-list-actions">
-                <button className="btn btn-secondary" onClick={handleImportClick}>
-                    Import Artists
-                </button>
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    style={{ display: "none" }}
-                    accept=".json"
-                />
-                <button className="btn btn-secondary" onClick={handleExport} disabled={artists.length === 0}>
-                    Export Artists
-                </button>
-                <button className="btn btn-secondary" onClick={handleImportHistoryClick}>
-                    Import History
-                </button>
-                <input
-                    type="file"
-                    ref={historyFileInputRef}
-                    onChange={handleHistoryFileSelect}
-                    style={{ display: "none" }}
-                    accept=".json"
-                />
-                <button className="btn btn-secondary" onClick={handleExportHistory} disabled={Object.keys(generationHistory).length === 0}>
-                    Export History
-                </button>
-            </div>
         </div>
         {artists.length === 0 ? (
           <p>No artists created yet. Add one above to get started!</p>
