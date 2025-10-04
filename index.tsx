@@ -53,14 +53,16 @@ const PRECONFIGURED_FIREBASE_CONFIG = {
 interface ManageArtistsViewProps {
   artists: Artist[];
   updateArtists: (newArtists: Artist[]) => void;
-  ai: GoogleGenAI;
+  ai: GoogleGenAI | null;
+  aiError: string | null;
   generationHistory: GenerationHistory;
   updateGenerationHistory: (newHistory: GenerationHistory) => void;
 }
 
 interface CreateSongViewProps {
   artists: Artist[];
-  ai: GoogleGenAI;
+  ai: GoogleGenAI | null;
+  aiError: string | null;
   generationHistory: GenerationHistory;
   updateGenerationHistory: (newHistory: GenerationHistory) => void;
 }
@@ -85,7 +87,7 @@ interface SongData {
 }
 
 // --- Artist Management View ---
-const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, updateGenerationHistory }: ManageArtistsViewProps) => {
+const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHistory, updateGenerationHistory }: ManageArtistsViewProps) => {
   const [editingArtist, setEditingArtist] = useState<Artist | null>(null);
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
@@ -155,6 +157,10 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
   };
   
   const handleGenerateRandomArtist = async () => {
+    if (!ai) {
+        setFormError(aiError || "AI Service is not configured. Please check your API key.");
+        return;
+    }
     setIsGenerating(true);
     setFormError(""); 
     if (editingArtist) {
@@ -250,7 +256,8 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
                     <button
                         className="btn btn-secondary btn-lucky"
                         onClick={handleGenerateRandomArtist}
-                        disabled={isGenerating}
+                        disabled={!ai || isGenerating}
+                        title={!ai ? (aiError || "AI Service not available") : "Generate a random artist"}
                     >
                         {isGenerating ? 'Generating...' : '✨ I trust my luck'}
                     </button>
@@ -287,7 +294,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
 };
 
 // --- Create Song View ---
-const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistory }: CreateSongViewProps) => {
+const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerationHistory }: CreateSongViewProps) => {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
   const [isInstrumental, setIsInstrumental] = useState(false);
@@ -316,10 +323,14 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
       setError("Please select an artist to get a theme suggestion.");
       return;
     }
+    if (!ai) {
+        setError(aiError || "AI Service is not configured. Please check your API key.");
+        return;
+    }
+
     setIsSuggesting(true);
     setError(null);
     try {
-        // FIX: Provide a default object shape for artistHistory to prevent type errors.
         const artistHistory = generationHistory[selectedArtistId] || { titles: [], themes: [], lyrics: [] };
         let prompt = `You are a creative muse for songwriters. The artist is "${selectedArtist.name}" and their style is "${selectedArtist.style}". Generate a single, concise, and evocative song theme or concept. The theme should be a short phrase, perfect for inspiring a song. CRITICAL: The final output must start with either "a song about" or "a track about". Do not add any other preamble, explanation, or quotation marks. For example: "a song about a forgotten astronaut watching Earth from afar".`;
         if (artistHistory.themes?.length > 0) {
@@ -340,7 +351,7 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
     } finally {
       setIsSuggesting(false);
     }
-  }, [selectedArtistId, artists, ai, generationHistory, updateGenerationHistory]);
+  }, [selectedArtistId, artists, ai, aiError, generationHistory, updateGenerationHistory]);
   
   const handleGenerate = useCallback(async () => {
     const selectedArtist = artists.find(a => a.id.toString() === selectedArtistId);
@@ -348,6 +359,11 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
       setError("Please select an artist.");
       return;
     }
+    if (!ai) {
+        setError(aiError || "AI Service is not configured. Please check your API key.");
+        return;
+    }
+
     setIsLoading(true);
     setSongData(null);
     setError(null);
@@ -359,7 +375,6 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
         return "Completely deconstruct the artist's style. Generate a 'what if?' scenario. What if this artist made a song in a completely unrelated genre? Be bold, abstract, and unpredictable. The connection to the original artist should be artistic and conceptual, not literal.";
     };
     const creativityInstruction = getCreativityInstruction(creativity);
-    // FIX: Provide a default object shape for artistHistory to prevent type errors.
     const artistHistory = generationHistory[selectedArtistId] || { titles: [], themes: [], lyrics: [] };
     let historyConstraints = "";
     if (artistHistory.titles?.length > 0) historyConstraints += `\n\nCRITICAL: Be creative and original. Avoid generating a song concept similar to these past titles for this artist: "${artistHistory.titles.join('", "')}".`;
@@ -409,7 +424,7 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
     } finally {
       setIsLoading(false);
     }
-  }, [selectedArtistId, comment, artists, ai, isInstrumental, generationHistory, updateGenerationHistory, creativity]);
+  }, [selectedArtistId, comment, artists, ai, aiError, isInstrumental, generationHistory, updateGenerationHistory, creativity]);
   
   const handleCopy = useCallback(async (content: string, buttonId: string) => {
     if (!content) return;
@@ -442,7 +457,7 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
         </select>
         <div className="comment-container">
           <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment (e.g., a song about a lost city)" aria-label="Optional comment" />
-           <button onClick={handleSuggestTheme} className="btn-suggest" title="Suggest a theme" disabled={isSuggesting || artists.length === 0 || !selectedArtistId}>
+           <button onClick={handleSuggestTheme} className="btn-suggest" title={!ai ? (aiError || "AI Service not available") : "Suggest a theme"} disabled={!ai || isSuggesting || artists.length === 0 || !selectedArtistId}>
               {isSuggesting ? <div className="spinner-small"></div> : '💡'}
           </button>
         </div>
@@ -454,7 +469,7 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
             <label htmlFor="creativity">Creativity Level: <span className="creativity-level-label">{creativityLevels[creativity]}</span></label>
             <input type="range" id="creativity" min="0" max="100" step="25" value={creativity} onChange={(e) => setCreativity(Number(e.target.value))} />
         </div>
-        <button className="btn btn-generate" onClick={handleGenerate} disabled={isLoading || artists.length === 0}>
+        <button className="btn btn-generate" onClick={handleGenerate} disabled={!ai || isLoading || artists.length === 0} title={!ai ? (aiError || "AI Service not available") : undefined}>
           {isLoading ? 'Generating...' : '✨ Generate Song'}
         </button>
       </div>
@@ -775,17 +790,12 @@ const App = () => {
   };
   
   const renderContent = () => {
-    // Priority 1: Handle critical AI initialization failure.
-    if (aiError) {
-      return <p className="error-message">{aiError}</p>;
-    }
-
-    // Priority 2: Wait for Firebase and Auth state to be ready.
+    // Priority 1: Wait for Firebase and Auth state to be ready.
     if (!appReady) {
       return <div className="spinner-overlay"><div className="spinner"></div></div>;
     }
 
-    // Priority 3: If not authenticated, show the AuthView.
+    // Priority 2: If not authenticated, show the AuthView.
     if (!user) {
       if (!auth || !db) {
         return <p className="error-message">Error: Application services could not be loaded.</p>;
@@ -793,8 +803,8 @@ const App = () => {
       return <AuthView auth={auth} db={db} />;
     }
 
-    // Priority 4: If authenticated, wait for user data and AI client to be ready.
-    if (dataLoading || !ai) {
+    // Priority 3: If authenticated, wait for user data to be ready.
+    if (dataLoading) {
         return <div className="spinner-overlay"><div className="spinner"></div></div>;
     }
 
@@ -806,8 +816,8 @@ const App = () => {
           <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
         </nav>
         {view === 'create' 
-          ? <CreateSongView artists={artists} ai={ai} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} /> 
-          : <ManageArtistsView artists={artists} updateArtists={updateArtists} ai={ai} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />
+          ? <CreateSongView artists={artists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} /> 
+          : <ManageArtistsView artists={artists} updateArtists={updateArtists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />
         }
       </>
     );
