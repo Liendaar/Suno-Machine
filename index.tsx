@@ -645,6 +645,17 @@ const App = () => {
   const [appReady, setAppReady] = useState(false); // Unified loading state for auth
   const [dataLoading, setDataLoading] = useState(true);
   const [ai, setAi] = useState<GoogleGenAI | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  // Initialize AI client on application startup
+  useEffect(() => {
+    try {
+      setAi(new GoogleGenAI({ apiKey: process.env.API_KEY }));
+    } catch (e) {
+      console.error("Failed to initialize GoogleGenAI:", e);
+      setAiError("Could not initialize the AI client. Make sure the API key is configured correctly.");
+    }
+  }, []);
 
   // Initialize Firebase
   useEffect(() => {
@@ -655,46 +666,28 @@ const App = () => {
         setDb(getFirestore(app));
       } catch (e) {
         console.error("Firebase initialization failed:", e);
-        alert("Failed to initialize the application services.");
-        setAppReady(true); // Stop loading if Firebase fails
+        // If Firebase fails, the app is still technically "ready" to show an error.
+        if (!appReady) setAppReady(true);
       }
     } else {
-        // This case would happen if the hardcoded config was removed or invalid.
-        setAppReady(true); // Stop loading if there's no config.
+        if (!appReady) setAppReady(true);
     }
-  }, [firebaseConfig]);
+  }, [firebaseConfig, appReady]);
   
   // Handle auth state changes
   useEffect(() => {
     if (!auth) {
+        if (!appReady) setAppReady(true);
         return;
     }
-    // The listener fires once on initial load, and again for any sign-in/sign-out.
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      // After the first auth state check, we know the user's status.
-      // The app is now ready to render the correct view.
       if (!appReady) {
         setAppReady(true);
       }
     });
-
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, [auth, appReady]);
-
-  // Initialize the AI client once the user is logged in
-  useEffect(() => {
-    // Lazily initialize the AI client only after a user has successfully logged in.
-    if (user && !ai) {
-      try {
-        setAi(new GoogleGenAI({ apiKey: process.env.API_KEY }));
-      } catch (e) {
-        console.error("Failed to initialize GoogleGenAI:", e);
-        alert("Could not initialize the AI client. Make sure the API key is configured correctly.");
-      }
-    }
-  }, [user, ai]);
 
   // Load user data from Firestore
   useEffect(() => {
@@ -717,15 +710,11 @@ const App = () => {
           setArtists(data.artists || []);
           setGenerationHistory(data.generationHistory || {});
           
-          // This is a backfill for existing users who might not have their email stored,
-          // which is needed for the username login feature.
           if (!data.email && user.email) {
             await setDoc(userDocRef, { email: user.email.toLowerCase() }, { merge: true });
           }
 
         } else if (user.displayName && user.email) {
-          // This case handles a new user created via email/password who doesn't have a doc yet.
-          // It's also a safeguard.
           await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase() });
           setArtists([]);
           setGenerationHistory({});
@@ -760,9 +749,6 @@ const App = () => {
     if (user && db) {
       const userDocRef = doc(db, "users", user.uid);
       try {
-        // By serializing and parsing the data, we create a deep clone that is guaranteed
-        // to be free of circular references or any non-serializable values (like functions),
-        // preventing "cyclic object value" errors when Firestore tries to process the data.
         const cleanData = JSON.parse(JSON.stringify(data));
         await setDoc(userDocRef, cleanData, { merge: true });
       } catch (error: any) {
@@ -789,26 +775,30 @@ const App = () => {
   };
   
   const renderContent = () => {
-    // Show a spinner until all initial auth checks are complete.
+    // Priority 1: Handle critical AI initialization failure.
+    if (aiError) {
+      return <p className="error-message">{aiError}</p>;
+    }
+
+    // Priority 2: Wait for Firebase and Auth state to be ready.
     if (!appReady) {
       return <div className="spinner-overlay"><div className="spinner"></div></div>;
     }
 
-    // If not authenticated, show the AuthView.
+    // Priority 3: If not authenticated, show the AuthView.
     if (!user) {
       if (!auth || !db) {
-        // This case is for when firebase init fails, spinner should already be gone.
         return <p className="error-message">Error: Application services could not be loaded.</p>;
       }
       return <AuthView auth={auth} db={db} />;
     }
 
-    // If authenticated, but user data or AI is still loading, show a spinner.
+    // Priority 4: If authenticated, wait for user data and AI client to be ready.
     if (dataLoading || !ai) {
         return <div className="spinner-overlay"><div className="spinner"></div></div>;
     }
 
-    // User is logged in, data is loaded, and AI is ready.
+    // All clear: Render the main application.
     return (
       <>
         <nav className="view-switcher">
