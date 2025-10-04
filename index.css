@@ -744,6 +744,79 @@ input[type="range"]::-moz-range-track {
   color: var(--primary-color);
 }
 
+/* Profile View */
+.profile-view {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.profile-info {
+  background-color: var(--background-color);
+  padding: 1rem;
+  border-radius: 4px;
+  color: var(--text-secondary-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--border-color);
+}
+
+.profile-info strong {
+  color: var(--text-color);
+}
+
+.api-key-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.api-key-section label {
+  font-weight: 700;
+  color: var(--text-secondary-color);
+}
+
+.api-key-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.api-key-input-wrapper input {
+  padding-right: 80px; /* Space for the button */
+}
+
+.btn-show-hide {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+  width: auto;
+}
+
+.help-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary-color);
+  margin-top: 0.25rem;
+}
+
+.help-text a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.help-text a:hover {
+  text-decoration: underline;
+}
+
+.save-success-message {
+  text-align: center;
+  color: #4caf50; /* A success green color */
+  margin-top: 0.5rem;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

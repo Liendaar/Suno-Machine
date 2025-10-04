@@ -72,6 +72,12 @@ interface AuthViewProps {
   db: Firestore;
 }
 
+interface ProfileViewProps {
+    user: User;
+    apiKey: string;
+    updateApiKey: (newKey: string) => void;
+}
+
 interface ResultCardProps {
     id: string;
     title: string;
@@ -549,7 +555,8 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
           artists: [],
           generationHistory: {},
           displayName: trimmedUsername,
-          email: trimmedEmail.toLowerCase()
+          email: trimmedEmail.toLowerCase(),
+          apiKey: ""
         });
       }
     } catch (err: any) {
@@ -581,7 +588,8 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
                 artists: [],
                 generationHistory: {},
                 displayName: user.displayName,
-                email: user.email.toLowerCase()
+                email: user.email.toLowerCase(),
+                apiKey: ""
             });
         }
         // On success, the onAuthStateChanged listener will handle the UI update,
@@ -644,14 +652,68 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
   );
 };
 
+const ProfileView = ({ user, apiKey, updateApiKey }: ProfileViewProps) => {
+    const [formApiKey, setFormApiKey] = useState(apiKey);
+    const [showKey, setShowKey] = useState(false);
+    const [saveMessage, setSaveMessage] = useState("");
+
+    useEffect(() => {
+        setFormApiKey(apiKey);
+    }, [apiKey]);
+
+    const handleSave = () => {
+        updateApiKey(formApiKey.trim());
+        setSaveMessage("API Key saved successfully!");
+        setTimeout(() => setSaveMessage(""), 3000);
+    };
+
+    return (
+        <div className="profile-view">
+            <div className="form-card">
+                <h3>Profile & Settings</h3>
+                <div className="profile-info">
+                    <div><strong>Username:</strong> {user.displayName}</div>
+                    <div><strong>Email:</strong> {user.email}</div>
+                </div>
+                <div className="form-divider"></div>
+                <div className="api-key-section">
+                    <label htmlFor="api-key">Your Google AI API Key</label>
+                    <div className="api-key-input-wrapper">
+                        <input
+                            id="api-key"
+                            type={showKey ? "text" : "password"}
+                            value={formApiKey}
+                            onChange={(e) => setFormApiKey(e.target.value)}
+                            placeholder="Enter your Google AI API key"
+                            aria-label="Google AI API Key"
+                        />
+                        <button className="btn btn-secondary btn-show-hide" onClick={() => setShowKey(!showKey)} aria-label={showKey ? 'Hide API key' : 'Show API key'}>
+                            {showKey ? 'Hide' : 'Show'}
+                        </button>
+                    </div>
+                    <p className="help-text">
+                        You can get your API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.
+                        Your key is stored in your user profile and is only used from your browser.
+                    </p>
+                </div>
+                <div className="form-actions">
+                    <button className="btn btn-primary" onClick={handleSave} disabled={formApiKey.trim() === apiKey}>
+                        Save API Key
+                    </button>
+                </div>
+                {saveMessage && <p className="save-success-message" role="status">{saveMessage}</p>}
+            </div>
+        </div>
+    );
+};
+
 
 // --- Main App Component ---
 const App = () => {
-  const [view, setView] = useState<'create' | 'manage'>('create');
+  const [view, setView] = useState<'create' | 'manage' | 'profile'>('create');
   const [artists, setArtists] = useState<Artist[]>([]);
   const [generationHistory, setGenerationHistory] = useState<GenerationHistory>({});
   
-  // The Firebase config is now hardcoded and stable.
   const [firebaseConfig, setFirebaseConfig] = useState(PRECONFIGURED_FIREBASE_CONFIG);
   
   const [auth, setAuth] = useState<Auth | null>(null);
@@ -659,18 +721,28 @@ const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [appReady, setAppReady] = useState(false); // Unified loading state for auth
   const [dataLoading, setDataLoading] = useState(true);
+
+  // AI State - now driven by user-provided key
+  const [apiKey, setApiKey] = useState<string>("");
   const [ai, setAi] = useState<GoogleGenAI | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  // Initialize AI client on application startup
+  // Initialize AI client when API key is available or changes
   useEffect(() => {
-    try {
-      setAi(new GoogleGenAI({ apiKey: process.env.API_KEY }));
-    } catch (e) {
-      console.error("Failed to initialize GoogleGenAI:", e);
-      setAiError("Could not initialize the AI client. Make sure the API key is configured correctly.");
+    if (apiKey) {
+      try {
+        setAi(new GoogleGenAI({ apiKey }));
+        setAiError(null);
+      } catch (e) {
+        console.error("Failed to initialize GoogleGenAI:", e);
+        setAi(null);
+        setAiError("Could not initialize the AI client with the provided key. It might be invalid.");
+      }
+    } else {
+      setAi(null);
+      setAiError("API Key is not set. Please add it in your Profile.");
     }
-  }, []);
+  }, [apiKey]);
 
   // Initialize Firebase
   useEffect(() => {
@@ -711,6 +783,7 @@ const App = () => {
       // Clear data on logout
       setArtists([]);
       setGenerationHistory({});
+      setApiKey("");
       return;
     }
     
@@ -724,15 +797,17 @@ const App = () => {
           const data = docSnap.data();
           setArtists(data.artists || []);
           setGenerationHistory(data.generationHistory || {});
+          setApiKey(data.apiKey || "");
           
           if (!data.email && user.email) {
             await setDoc(userDocRef, { email: user.email.toLowerCase() }, { merge: true });
           }
 
         } else if (user.displayName && user.email) {
-          await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase() });
+          await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase(), apiKey: "" });
           setArtists([]);
           setGenerationHistory({});
+          setApiKey("");
         }
       } catch (e: any) {
         console.error("Error loading user data:", e);
@@ -789,6 +864,11 @@ const App = () => {
     updateUserData({ generationHistory: newHistory });
   };
   
+  const updateApiKey = (newApiKey: string) => {
+    setApiKey(newApiKey);
+    updateUserData({ apiKey: newApiKey });
+  };
+  
   const renderContent = () => {
     // Priority 1: Wait for Firebase and Auth state to be ready.
     if (!appReady) {
@@ -809,16 +889,28 @@ const App = () => {
     }
 
     // All clear: Render the main application.
+    const renderCurrentView = () => {
+        switch (view) {
+            case 'create':
+                return <CreateSongView artists={artists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
+            case 'manage':
+                return <ManageArtistsView artists={artists} updateArtists={updateArtists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
+            case 'profile':
+                return <ProfileView user={user} apiKey={apiKey} updateApiKey={updateApiKey} />;
+            default:
+                setView('create'); // Fallback to a default view
+                return null;
+        }
+    };
+
     return (
       <>
         <nav className="view-switcher">
           <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
           <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
+          <button className={`btn ${view === 'profile' ? 'active' : ''}`} onClick={() => setView('profile')}>Profile</button>
         </nav>
-        {view === 'create' 
-          ? <CreateSongView artists={artists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} /> 
-          : <ManageArtistsView artists={artists} updateArtists={updateArtists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />
-        }
+        {renderCurrentView()}
       </>
     );
   };
