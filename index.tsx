@@ -222,7 +222,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
             return;
         }
         
-        const artistMap = new Map<string, Artist>(artists.map(a => [a.name.toLowerCase(), a]));
+        const artistMap = new Map(artists.map(a => [a.name.toLowerCase(), a]));
         let localAddedCount = 0;
         let localUpdatedCount = 0;
         
@@ -289,9 +289,11 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
 
         const validatedHistory: GenerationHistory = {};
         let importedCount = 0;
-        for (const key in importedHistory) {
+        // Fix: Cast importedHistory to Record<string, any> to allow safe iteration.
+        // This resolves issues where properties were accessed on an 'unknown' type and ensures the object can be spread.
+        for (const key in (importedHistory as Record<string, any>)) {
             if (Object.prototype.hasOwnProperty.call(importedHistory, key)) {
-                const item = (importedHistory as any)[key];
+                const item = (importedHistory as Record<string, any>)[key];
                 if (item && Array.isArray(item.titles) && Array.isArray(item.themes) && Array.isArray(item.lyrics)) {
                    validatedHistory[key] = {
                      titles: item.titles.filter((t: any) => typeof t === 'string'),
