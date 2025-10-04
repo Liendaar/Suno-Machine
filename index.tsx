@@ -15,8 +15,7 @@ import {
   signOut,
   updateProfile,
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   Auth,
   User
 } from "firebase/auth";
@@ -556,13 +555,26 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
     setLoading(true);
     const provider = new GoogleAuthProvider();
     try {
-      // Using signInWithRedirect is more robust in sandboxed environments
-      await signInWithRedirect(auth, provider);
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        
+        // Check if it's a new user and create their profile in Firestore.
+        const userDocRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(userDocRef);
+        if (!docSnap.exists() && user.displayName && user.email) {
+            await setDoc(userDocRef, {
+                artists: [],
+                generationHistory: {},
+                displayName: user.displayName,
+                email: user.email.toLowerCase()
+            });
+        }
+        // On success, the onAuthStateChanged listener will handle the UI update,
+        // so we don't need to setLoading(false) here.
     } catch (err: any) {
         console.error("Google Sign-In Error:", err);
         let message = "Failed to sign in with Google. Please try again.";
         if (err.code === 'auth/popup-closed-by-user') {
-            // This error is less likely with redirect, but good to keep
             message = "Sign-in process was cancelled.";
         } else if (err.code === 'auth/unauthorized-domain') {
             message = "This domain is not authorized for Google Sign-In. Please contact support.";
@@ -630,8 +642,7 @@ const App = () => {
   const [auth, setAuth] = useState<Auth | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
+  const [appReady, setAppReady] = useState(false); // Unified loading state for auth
   const [dataLoading, setDataLoading] = useState(true);
   const [ai, setAi] = useState<GoogleGenAI | null>(null);
 
@@ -644,73 +655,33 @@ const App = () => {
         setDb(getFirestore(app));
       } catch (e) {
         console.error("Firebase initialization failed:", e);
-        // We no longer show a prompt for config since it's hardcoded.
-        // We can just log the error or show a generic failure message.
         alert("Failed to initialize the application services.");
+        setAppReady(true); // Stop loading if Firebase fails
       }
     } else {
         // This case would happen if the hardcoded config was removed or invalid.
-        setAuthLoading(false);
-        setDataLoading(false);
+        setAppReady(true); // Stop loading if there's no config.
     }
   }, [firebaseConfig]);
   
-  // Handle Google sign-in redirect result
+  // Handle auth state changes
   useEffect(() => {
-    if (!auth || !db) {
-        // If Firebase isn't initialized, we can't process a redirect.
-        // If we know there's no config, we can stop waiting.
-        if (!firebaseConfig) {
-            setIsProcessingRedirect(false);
-        }
+    if (!auth) {
         return;
     }
-    
-    const processRedirect = async () => {
-        try {
-            const result = await getRedirectResult(auth);
-            if (result) {
-                // User has successfully signed in.
-                const user = result.user;
-                const userDocRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(userDocRef);
+    // The listener fires once on initial load, and again for any sign-in/sign-out.
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      // After the first auth state check, we know the user's status.
+      // The app is now ready to render the correct view.
+      if (!appReady) {
+        setAppReady(true);
+      }
+    });
 
-                // If the user document doesn't exist, this is their first sign-in.
-                // Create their profile in Firestore.
-                if (!docSnap.exists() && user.displayName && user.email) {
-                    await setDoc(userDocRef, {
-                        artists: [],
-                        generationHistory: {},
-                        displayName: user.displayName,
-                        email: user.email.toLowerCase()
-                    });
-                }
-            }
-        } catch (error) {
-            console.error("Google Redirect Sign-In Error:", error);
-        } finally {
-            // No matter the outcome, we are done processing the redirect attempt.
-            setIsProcessingRedirect(false);
-        }
-    };
-    
-    processRedirect();
-  }, [auth, db, firebaseConfig]);
-
-  // Listen for auth state changes
-  useEffect(() => {
-    if (auth) {
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-        setAuthLoading(false);
-      });
-      // Cleanup subscription on unmount
-      return () => unsubscribe();
-    } else {
-      // If there's no auth instance yet (e.g. waiting for config), we're not loading auth state.
-      setAuthLoading(false);
-    }
-  }, [auth]);
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, [auth, appReady]);
 
   // Initialize the AI client once the user is logged in
   useEffect(() => {
@@ -818,16 +789,16 @@ const App = () => {
   };
   
   const renderContent = () => {
-    // Show a spinner while checking the initial auth state or processing a sign-in redirect.
-    if (authLoading || isProcessingRedirect) {
+    // Show a spinner until all initial auth checks are complete.
+    if (!appReady) {
       return <div className="spinner-overlay"><div className="spinner"></div></div>;
     }
 
     // If not authenticated, show the AuthView.
     if (!user) {
       if (!auth || !db) {
-        // This case is unlikely with the new loading logic but acts as a safeguard.
-        return <div className="spinner-overlay"><div className="spinner"></div></div>;
+        // This case is for when firebase init fails, spinner should already be gone.
+        return <p className="error-message">Error: Application services could not be loaded.</p>;
       }
       return <AuthView auth={auth} db={db} />;
     }
