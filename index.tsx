@@ -20,22 +20,7 @@ import {
 } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
 
-// --- Type Definitions ---
-interface Artist {
-  id: number | string;
-  name: string;
-  style: string;
-}
-
-interface GenerationHistoryItem {
-  titles: string[];
-  themes: string[];
-  lyrics: string[];
-}
-
-interface GenerationHistory {
-  [key: string]: GenerationHistoryItem;
-}
+// --- Type Definitions removed for JS compatibility ---
 
 // --- Hardcoded Firebase Configuration ---
 const PRECONFIGURED_FIREBASE_CONFIG = {
@@ -50,7 +35,7 @@ const PRECONFIGURED_FIREBASE_CONFIG = {
 
 // --- Artist Management View ---
 const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, updateGenerationHistory }) => {
-  const [editingArtist, setEditingArtist] = useState<Artist | null>(null);
+  const [editingArtist, setEditingArtist] = useState(null);
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
   const [formError, setFormError] = useState("");
@@ -88,7 +73,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
       return;
     }
     
-    let newArtists: Artist[];
+    let newArtists;
     if (editingArtist) {
       newArtists = artists.map((a) =>
           a.id === editingArtist.id ? { ...a, name: trimmedName, style: trimmedStyle } : a
@@ -103,7 +88,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
     setEditingArtist(null);
   };
 
-  const handleDelete = (id: number | string) => {
+  const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this artist? This will also delete their generation history.")) {
       const newArtists = artists.filter((a) => a.id !== id);
       updateArtists(newArtists);
@@ -582,8 +567,8 @@ const AuthView = ({ auth, db }) => {
 // --- Main App Component ---
 const App = () => {
   const [view, setView] = useState('create');
-  const [artists, setArtists] = useState<Artist[]>([]);
-  const [generationHistory, setGenerationHistory] = useState<GenerationHistory>({});
+  const [artists, setArtists] = useState([]);
+  const [generationHistory, setGenerationHistory] = useState({});
   
   // The Firebase config is now hardcoded and stable.
   const [firebaseConfig, setFirebaseConfig] = useState(PRECONFIGURED_FIREBASE_CONFIG);
@@ -712,7 +697,7 @@ const App = () => {
         }
       } catch (e) {
         console.error("Error loading user data:", e);
-        let alertMessage: string;
+        let alertMessage;
         if (e.code === 'unavailable' || e.message.includes('offline')) {
             alertMessage = "Connection to Firestore failed. The application may not work correctly.\n\nPlease check the following:\n1. Your internet connection is active.\n2. In your Firebase project ('suno-machine'), you have created a Cloud Firestore database.\n3. The Firebase project configuration is correct.";
         } else if (e.code === 'permission-denied') {
@@ -736,7 +721,7 @@ const App = () => {
   };
 
   // Generic function to update user data in Firestore
-  const updateUserData = async (data: object) => {
+  const updateUserData = async (data) => {
     if (user && db) {
       const userDocRef = doc(db, "users", user.uid);
       try {
@@ -758,12 +743,12 @@ const App = () => {
     }
   };
 
-  const updateArtists = (newArtists: Artist[]) => {
+  const updateArtists = (newArtists) => {
     setArtists(newArtists);
     updateUserData({ artists: newArtists });
   };
 
-  const updateGenerationHistory = (newHistory: GenerationHistory) => {
+  const updateGenerationHistory = (newHistory) => {
     setGenerationHistory(newHistory);
     updateUserData({ generationHistory: newHistory });
   };
