@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp } from "firebase/app";
@@ -17,10 +17,27 @@ import {
   GoogleAuthProvider,
   signInWithRedirect,
   getRedirectResult,
+  Auth,
+  User
 } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, Firestore } from "firebase/firestore";
 
-// --- Type Definitions removed for JS compatibility ---
+// --- Type Definitions ---
+interface Artist {
+  id: number;
+  name: string;
+  style: string;
+}
+
+interface GenerationHistoryItem {
+  titles: string[];
+  themes: string[];
+  lyrics: string[];
+}
+
+interface GenerationHistory {
+  [artistId: string]: GenerationHistoryItem;
+}
 
 // --- Hardcoded Firebase Configuration ---
 const PRECONFIGURED_FIREBASE_CONFIG = {
@@ -33,9 +50,44 @@ const PRECONFIGURED_FIREBASE_CONFIG = {
   measurementId: "G-NCRYVNFZDR"
 };
 
+// --- Prop Type Definitions ---
+interface ManageArtistsViewProps {
+  artists: Artist[];
+  updateArtists: (newArtists: Artist[]) => void;
+  ai: GoogleGenAI;
+  generationHistory: GenerationHistory;
+  updateGenerationHistory: (newHistory: GenerationHistory) => void;
+}
+
+interface CreateSongViewProps {
+  artists: Artist[];
+  ai: GoogleGenAI;
+  generationHistory: GenerationHistory;
+  updateGenerationHistory: (newHistory: GenerationHistory) => void;
+}
+
+interface AuthViewProps {
+  auth: Auth;
+  db: Firestore;
+}
+
+interface ResultCardProps {
+    id: string;
+    title: string;
+    content: string;
+    onCopy: (content: string, buttonId: string) => void;
+    isLarge?: boolean;
+}
+
+interface SongData {
+    title: string;
+    style: string;
+    lyrics: string;
+}
+
 // --- Artist Management View ---
-const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, updateGenerationHistory }) => {
-  const [editingArtist, setEditingArtist] = useState(null);
+const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, updateGenerationHistory }: ManageArtistsViewProps) => {
+  const [editingArtist, setEditingArtist] = useState<Artist | null>(null);
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
   const [formError, setFormError] = useState("");
@@ -73,7 +125,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
       return;
     }
     
-    let newArtists;
+    let newArtists: Artist[];
     if (editingArtist) {
       newArtists = artists.map((a) =>
           a.id === editingArtist.id ? { ...a, name: trimmedName, style: trimmedStyle } : a
@@ -88,7 +140,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
     setEditingArtist(null);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = (id: number) => {
     if (window.confirm("Are you sure you want to delete this artist? This will also delete their generation history.")) {
       const newArtists = artists.filter((a) => a.id !== id);
       updateArtists(newArtists);
@@ -236,17 +288,17 @@ const ManageArtistsView = ({ artists, updateArtists, ai, generationHistory, upda
 };
 
 // --- Create Song View ---
-const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistory }) => {
+const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistory }: CreateSongViewProps) => {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
   const [isInstrumental, setIsInstrumental] = useState(false);
   const [creativity, setCreativity] = useState(25);
-  const [songData, setSongData] = useState(null);
+  const [songData, setSongData] = useState<SongData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   
-  const creativityLevels = {
+  const creativityLevels: { [key: number]: string } = {
     0: 'Identical', 25: 'Subtle', 50: 'Inspired',
     75: 'Experimental', 100: 'Wildcard',
   };
@@ -268,7 +320,8 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
     setIsSuggesting(true);
     setError(null);
     try {
-        const artistHistory = generationHistory[selectedArtistId] || {};
+        // FIX: Provide a default object shape for artistHistory to prevent type errors.
+        const artistHistory = generationHistory[selectedArtistId] || { titles: [], themes: [], lyrics: [] };
         let prompt = `You are a creative muse for songwriters. The artist is "${selectedArtist.name}" and their style is "${selectedArtist.style}". Generate a single, concise, and evocative song theme or concept. The theme should be a short phrase, perfect for inspiring a song. CRITICAL: The final output must start with either "a song about" or "a track about". Do not add any other preamble, explanation, or quotation marks. For example: "a song about a forgotten astronaut watching Earth from afar".`;
         if (artistHistory.themes?.length > 0) {
             prompt += `\n\nIMPORTANT: Avoid themes similar to these past suggestions for this artist: "${artistHistory.themes.join('", "')}". Be original.`;
@@ -299,7 +352,7 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
     setIsLoading(true);
     setSongData(null);
     setError(null);
-    const getCreativityInstruction = (level) => {
+    const getCreativityInstruction = (level: number) => {
         if (level === 0) return "Adhere as strictly as possible to the artist's established style provided. The output should be a textbook example of their sound.";
         if (level === 25) return "Stay close to the artist's core style, but introduce one or two subtle, fresh elements. It should feel familiar yet new.";
         if (level === 50) return "Use the artist's style as a strong starting point, but feel free to blend in a complementary genre or experiment with song structure. This is an evolution of their sound.";
@@ -307,7 +360,8 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
         return "Completely deconstruct the artist's style. Generate a 'what if?' scenario. What if this artist made a song in a completely unrelated genre? Be bold, abstract, and unpredictable. The connection to the original artist should be artistic and conceptual, not literal.";
     };
     const creativityInstruction = getCreativityInstruction(creativity);
-    const artistHistory = generationHistory[selectedArtistId] || {};
+    // FIX: Provide a default object shape for artistHistory to prevent type errors.
+    const artistHistory = generationHistory[selectedArtistId] || { titles: [], themes: [], lyrics: [] };
     let historyConstraints = "";
     if (artistHistory.titles?.length > 0) historyConstraints += `\n\nCRITICAL: Be creative and original. Avoid generating a song concept similar to these past titles for this artist: "${artistHistory.titles.join('", "')}".`;
     if (artistHistory.lyrics?.length > 0) {
@@ -358,7 +412,7 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
     }
   }, [selectedArtistId, comment, artists, ai, isInstrumental, generationHistory, updateGenerationHistory, creativity]);
   
-  const handleCopy = useCallback(async (content, buttonId) => {
+  const handleCopy = useCallback(async (content: string, buttonId: string) => {
     if (!content) return;
     try {
       await navigator.clipboard.writeText(content);
@@ -421,7 +475,7 @@ const CreateSongView = ({ artists, ai, generationHistory, updateGenerationHistor
   );
 };
 
-const AuthView = ({ auth, db }) => {
+const AuthView = ({ auth, db }: AuthViewProps) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -429,7 +483,7 @@ const AuthView = ({ auth, db }) => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -484,7 +538,7 @@ const AuthView = ({ auth, db }) => {
           email: trimmedEmail.toLowerCase()
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       let message = err.message;
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         message = 'Invalid username or password.';
@@ -504,7 +558,7 @@ const AuthView = ({ auth, db }) => {
     try {
       // Using signInWithRedirect is more robust in sandboxed environments
       await signInWithRedirect(auth, provider);
-    } catch (err) {
+    } catch (err: any) {
         console.error("Google Sign-In Error:", err);
         let message = "Failed to sign in with Google. Please try again.";
         if (err.code === 'auth/popup-closed-by-user') {
@@ -566,19 +620,19 @@ const AuthView = ({ auth, db }) => {
 
 // --- Main App Component ---
 const App = () => {
-  const [view, setView] = useState('create');
-  const [artists, setArtists] = useState([]);
-  const [generationHistory, setGenerationHistory] = useState({});
+  const [view, setView] = useState<'create' | 'manage'>('create');
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [generationHistory, setGenerationHistory] = useState<GenerationHistory>({});
   
   // The Firebase config is now hardcoded and stable.
   const [firebaseConfig, setFirebaseConfig] = useState(PRECONFIGURED_FIREBASE_CONFIG);
   
-  const [auth, setAuth] = useState(null);
-  const [db, setDb] = useState(null);
-  const [user, setUser] = useState(null);
+  const [auth, setAuth] = useState<Auth | null>(null);
+  const [db, setDb] = useState<Firestore | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
-  const [ai, setAi] = useState(null);
+  const [ai, setAi] = useState<GoogleGenAI | null>(null);
 
   // Initialize Firebase
   useEffect(() => {
@@ -592,7 +646,6 @@ const App = () => {
         // We no longer show a prompt for config since it's hardcoded.
         // We can just log the error or show a generic failure message.
         alert("Failed to initialize the application services.");
-        setFirebaseConfig(null); // Prevent re-initialization loops
       }
     } else {
         // This case would happen if the hardcoded config was removed or invalid.
@@ -614,7 +667,7 @@ const App = () => {
           
           // Check if the user document already exists.
           getDoc(userDocRef).then(docSnap => {
-            if (!docSnap.exists()) {
+            if (!docSnap.exists() && user.displayName && user.email) {
               // New user via Google, create their profile.
               setDoc(userDocRef, {
                 artists: [],
@@ -688,14 +741,14 @@ const App = () => {
             await setDoc(userDocRef, { email: user.email.toLowerCase() }, { merge: true });
           }
 
-        } else {
+        } else if (user.displayName && user.email) {
           // This case handles a new user created via email/password who doesn't have a doc yet.
           // It's also a safeguard.
           await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase() });
           setArtists([]);
           setGenerationHistory({});
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error("Error loading user data:", e);
         let alertMessage;
         if (e.code === 'unavailable' || e.message.includes('offline')) {
@@ -721,7 +774,7 @@ const App = () => {
   };
 
   // Generic function to update user data in Firestore
-  const updateUserData = async (data) => {
+  const updateUserData = async (data: object) => {
     if (user && db) {
       const userDocRef = doc(db, "users", user.uid);
       try {
@@ -730,7 +783,7 @@ const App = () => {
         // preventing "cyclic object value" errors when Firestore tries to process the data.
         const cleanData = JSON.parse(JSON.stringify(data));
         await setDoc(userDocRef, cleanData, { merge: true });
-      } catch (error) {
+      } catch (error: any) {
         console.error("Firestore update failed:", error);
         let alertMessage = "There was a problem saving your data. Please check your connection and try again.";
         if (error.code === 'unavailable' || error.message.includes('offline')) {
@@ -743,12 +796,12 @@ const App = () => {
     }
   };
 
-  const updateArtists = (newArtists) => {
+  const updateArtists = (newArtists: Artist[]) => {
     setArtists(newArtists);
     updateUserData({ artists: newArtists });
   };
 
-  const updateGenerationHistory = (newHistory) => {
+  const updateGenerationHistory = (newHistory: GenerationHistory) => {
     setGenerationHistory(newHistory);
     updateUserData({ generationHistory: newHistory });
   };
@@ -761,7 +814,7 @@ const App = () => {
 
     // If not authenticated, show the AuthView
     if (!user) {
-      if (!auth) {
+      if (!auth || !db) {
         // This prevents passing a null auth object if Firebase is still initializing
         return <div className="spinner-overlay"><div className="spinner"></div></div>;
       }
@@ -803,7 +856,7 @@ const App = () => {
         </div>
         {user && (
             <div className="header-actions">
-                <span className="user-display" title={user.email}>{user.displayName || user.email}</span>
+                <span className="user-display" title={user.email || ""}>{user.displayName || user.email}</span>
                 <button onClick={handleLogout} className="btn btn-logout">Logout</button>
             </div>
         )}
@@ -813,7 +866,7 @@ const App = () => {
   );
 };
 
-const ResultCard = ({ id, title, content, onCopy, isLarge = false }) => (
+const ResultCard = ({ id, title, content, onCopy, isLarge = false }: ResultCardProps) => (
     <div id={id} className={`result-card ${isLarge ? 'large' : ''}`}>
         <div className="result-header">
             <h2>{title}</h2>
@@ -827,5 +880,5 @@ const ResultCard = ({ id, title, content, onCopy, isLarge = false }) => (
     </div>
 );
 
-const root = createRoot(document.getElementById("root"));
+const root = createRoot(document.getElementById("root")!);
 root.render(<App />);
