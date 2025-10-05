@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect } from "react";
+// FIX: Import useMemo for SDK initialization and correct types for API calls.
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { createRoot } from "react-dom/client";
-import { GoogleGenAI, Type } from "@google/genai";
+// FIX: Import correct types for API calls.
+import { GoogleGenAI, Type, GenerateContentParameters, GenerateContentResponse } from "@google/genai";
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
@@ -53,16 +55,16 @@ const PRECONFIGURED_FIREBASE_CONFIG = {
 interface ManageArtistsViewProps {
   artists: Artist[];
   updateArtists: (newArtists: Artist[]) => void;
-  ai: GoogleGenAI | null;
-  aiError: string | null;
+  // FIX: Use specific types for the generative AI call function.
+  callGenerativeAI: (payload: GenerateContentParameters) => Promise<GenerateContentResponse>;
   generationHistory: GenerationHistory;
   updateGenerationHistory: (newHistory: GenerationHistory) => void;
 }
 
 interface CreateSongViewProps {
   artists: Artist[];
-  ai: GoogleGenAI | null;
-  aiError: string | null;
+  // FIX: Use specific types for the generative AI call function.
+  callGenerativeAI: (payload: GenerateContentParameters) => Promise<GenerateContentResponse>;
   generationHistory: GenerationHistory;
   updateGenerationHistory: (newHistory: GenerationHistory) => void;
 }
@@ -72,11 +74,7 @@ interface AuthViewProps {
   db: Firestore;
 }
 
-interface ProfileViewProps {
-    user: User;
-    apiKey: string;
-    updateApiKey: (newKey: string) => void;
-}
+// FIX: Removed ProfileViewProps as the component is being removed.
 
 interface ResultCardProps {
     id: string;
@@ -93,7 +91,7 @@ interface SongData {
 }
 
 // --- Artist Management View ---
-const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHistory, updateGenerationHistory }: ManageArtistsViewProps) => {
+const ManageArtistsView = ({ artists, updateArtists, callGenerativeAI, generationHistory, updateGenerationHistory }: ManageArtistsViewProps) => {
   const [editingArtist, setEditingArtist] = useState<Artist | null>(null);
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
@@ -172,10 +170,6 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
   };
   
   const handleGenerateRandomArtist = async () => {
-    if (!ai) {
-        setFormError(aiError || "AI Service is not configured. Please check your API key.");
-        return;
-    }
     setIsGenerating(true);
     setFormError(""); 
     if (editingArtist) {
@@ -193,23 +187,24 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
       }
 
       prompt += `Provide a unique name and a detailed, evocative description of their musical style. The style description should be 2-3 sentences long and clearly explain the fusion of genres.\n\nFor example:\n- Name: "Abyssal Choir", Style: "A fusion of Gregorian monastery chants with deep, atmospheric glitch-hop beats. Their music feels both ancient and futuristic, echoing from the depths of a digital cathedral."\n- Name: "Sawdust & Starlight", Style: "Appalachian banjo folk music blended with ambient space-drone soundscapes. It's the sound of a lonely astronaut playing old mountain tunes in a silent starship."\n\nReturn the result as a JSON object with "name" and "style" keys.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING, description: "The unique name of the fictional artist." },
-              style: { type: Type.STRING, description: "A detailed description of the artist's musical style, fusing unconventional genres." },
-            },
-            required: ["name", "style"],
+      
+      const payload: GenerateContentParameters = {
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      name: { type: Type.STRING, description: "The unique name of the fictional artist." },
+                      style: { type: Type.STRING, description: "A detailed description of the artist's musical style, fusing unconventional genres." },
+                  },
+                  required: ["name", "style"],
+              },
           },
-        },
-      });
+      };
 
+      const response = await callGenerativeAI(payload);
       const responseText = response.text.trim();
       const newArtistData = JSON.parse(responseText);
 
@@ -221,7 +216,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
       }
     } catch (e) {
       console.error("Error generating random artist:", e);
-      alert("Sorry, couldn't generate an artist. Please try again.");
+      setFormError(e.message || "Sorry, couldn't generate an artist. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -272,8 +267,8 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
                     <button
                         className="btn btn-secondary btn-lucky"
                         onClick={handleGenerateRandomArtist}
-                        disabled={!ai || isGenerating}
-                        title={!ai ? (aiError || "AI Service not available") : "Generate a random artist"}
+                        disabled={isGenerating}
+                        title="Generate a random artist"
                     >
                         {isGenerating ? 'Generating...' : '✨ I trust my luck'}
                     </button>
@@ -310,7 +305,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
 };
 
 // --- Create Song View ---
-const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerationHistory }: CreateSongViewProps) => {
+const CreateSongView = ({ artists, callGenerativeAI, generationHistory, updateGenerationHistory }: CreateSongViewProps) => {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
   const [isInstrumental, setIsInstrumental] = useState(false);
@@ -339,10 +334,6 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
       setError("Please select an artist to get a theme suggestion.");
       return;
     }
-    if (!ai) {
-        setError(aiError || "AI Service is not configured. Please check your API key.");
-        return;
-    }
 
     setIsSuggesting(true);
     setError(null);
@@ -352,7 +343,9 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
         if (artistHistory.themes?.length > 0) {
             prompt += `\n\nIMPORTANT: Avoid themes similar to these past suggestions for this artist: "${artistHistory.themes.join('", "')}". Be original.`;
         }
-        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+        
+        const payload: GenerateContentParameters = { model: 'gemini-2.5-flash', contents: prompt };
+        const response = await callGenerativeAI(payload);
         const suggestedTheme = response.text.trim();
         setComment(suggestedTheme);
         
@@ -363,21 +356,17 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
         updateGenerationHistory(newHistory);
     } catch (e) {
       console.error("Error suggesting theme:", e);
-      setError("Failed to suggest a theme. Please try again.");
+      setError(e.message || "Failed to suggest a theme. Please try again.");
     } finally {
       setIsSuggesting(false);
     }
-  }, [selectedArtistId, artists, ai, aiError, generationHistory, updateGenerationHistory]);
+  }, [selectedArtistId, artists, callGenerativeAI, generationHistory, updateGenerationHistory]);
   
   const handleGenerate = useCallback(async () => {
     const selectedArtist = artists.find(a => a.id.toString() === selectedArtistId);
     if (!selectedArtist) {
       setError("Please select an artist.");
       return;
-    }
-    if (!ai) {
-        setError(aiError || "AI Service is not configured. Please check your API key.");
-        return;
     }
 
     setIsLoading(true);
@@ -421,11 +410,12 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
       responseSchema = { type: Type.OBJECT, properties: { title: { type: Type.STRING }, style: { type: Type.STRING }, lyrics: { type: Type.STRING } }, required: ["title", "style", "lyrics"] };
     }
     try {
-      const response = await ai.models.generateContent({
+      const payload: GenerateContentParameters = {
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: { responseMimeType: "application/json", responseSchema: responseSchema },
-      });
+      };
+      const response = await callGenerativeAI(payload);
       const responseText = response.text.trim();
       const parsedData = JSON.parse(responseText);
       setSongData(parsedData);
@@ -438,11 +428,11 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
       updateGenerationHistory(newHistory);
     } catch (e) {
       console.error("Error generating song:", e);
-      setError("Failed to generate the song. Please try again.");
+      setError(e.message || "Failed to generate the song. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  }, [selectedArtistId, comment, artists, ai, aiError, isInstrumental, generationHistory, updateGenerationHistory, creativity]);
+  }, [selectedArtistId, comment, artists, callGenerativeAI, isInstrumental, generationHistory, updateGenerationHistory, creativity]);
   
   const handleCopy = useCallback(async (content: string, buttonId: string) => {
     if (!content) return;
@@ -475,7 +465,7 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
         </select>
         <div className="comment-container">
           <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment (e.g., a song about a lost city)" aria-label="Optional comment" />
-           <button onClick={handleSuggestTheme} className="btn-suggest" title={!ai ? (aiError || "AI Service not available") : "Suggest a theme"} disabled={!ai || isSuggesting || artists.length === 0 || !selectedArtistId}>
+           <button onClick={handleSuggestTheme} className="btn-suggest" title="Suggest a theme" disabled={isSuggesting || artists.length === 0 || !selectedArtistId}>
               {isSuggesting ? <div className="spinner-small"></div> : '💡'}
           </button>
         </div>
@@ -487,7 +477,7 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
             <label htmlFor="creativity">Creativity Level: <span className="creativity-level-label">{creativityLevels[creativity]}</span></label>
             <input type="range" id="creativity" min="0" max="100" step="25" value={creativity} onChange={(e) => setCreativity(Number(e.target.value))} />
         </div>
-        <button className="btn btn-generate" onClick={handleGenerate} disabled={!ai || isLoading || artists.length === 0} title={!ai ? (aiError || "AI Service not available") : undefined}>
+        <button className="btn btn-generate" onClick={handleGenerate} disabled={isLoading || artists.length === 0}>
           {isLoading ? 'Generating...' : '✨ Generate Song'}
         </button>
       </div>
@@ -563,12 +553,12 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
         
         // Create user document in Firestore
         const userDocRef = doc(db, "users", userCredential.user.uid);
+        // FIX: Remove apiKey from user document on creation.
         await setDoc(userDocRef, {
           artists: [],
           generationHistory: {},
           displayName: trimmedUsername,
           email: trimmedEmail.toLowerCase(),
-          apiKey: ""
         });
       }
     } catch (err: any) {
@@ -596,12 +586,12 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
         const userDocRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(userDocRef);
         if (!docSnap.exists() && user.displayName && user.email) {
+            // FIX: Remove apiKey from user document on creation.
             await setDoc(userDocRef, {
                 artists: [],
                 generationHistory: {},
                 displayName: user.displayName,
                 email: user.email.toLowerCase(),
-                apiKey: ""
             });
         }
         // On success, the onAuthStateChanged listener will handle the UI update,
@@ -664,65 +654,12 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
   );
 };
 
-const ProfileView = ({ user, apiKey, updateApiKey }: ProfileViewProps) => {
-    const [formApiKey, setFormApiKey] = useState(apiKey);
-    const [showKey, setShowKey] = useState(false);
-    const [saveMessage, setSaveMessage] = useState("");
-
-    useEffect(() => {
-        setFormApiKey(apiKey);
-    }, [apiKey]);
-
-    const handleSave = () => {
-        updateApiKey(formApiKey.trim());
-        setSaveMessage("API Key saved successfully!");
-        setTimeout(() => setSaveMessage(""), 3000);
-    };
-
-    return (
-        <div className="profile-view">
-            <div className="form-card">
-                <h3>Profile & Settings</h3>
-                <div className="profile-info">
-                    <div><strong>Username:</strong> {user.displayName}</div>
-                    <div><strong>Email:</strong> {user.email}</div>
-                </div>
-                <div className="form-divider"></div>
-                <div className="api-key-section">
-                    <label htmlFor="api-key">Your Google AI API Key</label>
-                    <div className="api-key-input-wrapper">
-                        <input
-                            id="api-key"
-                            type={showKey ? "text" : "password"}
-                            value={formApiKey}
-                            onChange={(e) => setFormApiKey(e.target.value)}
-                            placeholder="Enter your Google AI API key"
-                            aria-label="Google AI API Key"
-                        />
-                        <button className="btn btn-secondary btn-show-hide" onClick={() => setShowKey(!showKey)} aria-label={showKey ? 'Hide API key' : 'Show API key'}>
-                            {showKey ? 'Hide' : 'Show'}
-                        </button>
-                    </div>
-                    <p className="help-text">
-                        You can get your API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.
-                        Your key is stored in your user profile and is only used from your browser.
-                    </p>
-                </div>
-                <div className="form-actions">
-                    <button className="btn btn-primary" onClick={handleSave} disabled={formApiKey.trim() === apiKey}>
-                        Save API Key
-                    </button>
-                </div>
-                {saveMessage && <p className="save-success-message" role="status">{saveMessage}</p>}
-            </div>
-        </div>
-    );
-};
-
+// FIX: Remove ProfileView component as API key is now handled by environment variables.
 
 // --- Main App Component ---
 const App = () => {
-  const [view, setView] = useState<'create' | 'manage' | 'profile'>('create');
+  // FIX: Remove 'profile' from view state as the view is removed.
+  const [view, setView] = useState<'create' | 'manage'>('create');
   const [artists, setArtists] = useState<Artist[]>([]);
   const [generationHistory, setGenerationHistory] = useState<GenerationHistory>({});
   
@@ -733,28 +670,21 @@ const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [appReady, setAppReady] = useState(false); // Unified loading state for auth
   const [dataLoading, setDataLoading] = useState(true);
-
-  // AI State - now driven by user-provided key
-  const [apiKey, setApiKey] = useState<string>("");
-  const [ai, setAi] = useState<GoogleGenAI | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  // Initialize AI client when API key is available or changes
-  useEffect(() => {
-    if (apiKey) {
-      try {
-        setAi(new GoogleGenAI({ apiKey }));
-        setAiError(null);
-      } catch (e) {
+  // FIX: Remove apiKey state. The key will come from process.env.
+  
+  // FIX: Initialize the GoogleGenAI client using an environment variable.
+  // This is safer and aligns with best practices.
+  const genAI = useMemo(() => {
+    try {
+        // As per guidelines, API_KEY is assumed to be in the environment.
+        return new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    } catch (e) {
         console.error("Failed to initialize GoogleGenAI:", e);
-        setAi(null);
-        setAiError("Could not initialize the AI client with the provided key. It might be invalid.");
-      }
-    } else {
-      setAi(null);
-      setAiError("API Key is not set. Please add it in your Profile.");
+        alert("Failed to initialize Google AI. The API_KEY environment variable might be missing or invalid.");
+        return null;
     }
-  }, [apiKey]);
+  }, []);
+
 
   // Initialize Firebase
   useEffect(() => {
@@ -765,7 +695,6 @@ const App = () => {
         setDb(getFirestore(app));
       } catch (e) {
         console.error("Firebase initialization failed:", e);
-        // If Firebase fails, the app is still technically "ready" to show an error.
         if (!appReady) setAppReady(true);
       }
     } else {
@@ -795,7 +724,7 @@ const App = () => {
       // Clear data on logout
       setArtists([]);
       setGenerationHistory({});
-      setApiKey("");
+      // FIX: Remove apiKey state update.
       return;
     }
     
@@ -809,17 +738,17 @@ const App = () => {
           const data = docSnap.data();
           setArtists(data.artists || []);
           setGenerationHistory(data.generationHistory || {});
-          setApiKey(data.apiKey || "");
+          // FIX: Remove apiKey loading.
           
           if (!data.email && user.email) {
             await setDoc(userDocRef, { email: user.email.toLowerCase() }, { merge: true });
           }
 
         } else if (user.displayName && user.email) {
-          await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase(), apiKey: "" });
+          // FIX: Remove apiKey on new user document creation.
+          await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase() });
           setArtists([]);
           setGenerationHistory({});
-          setApiKey("");
         }
       } catch (e: any) {
         console.error("Error loading user data:", e);
@@ -839,6 +768,27 @@ const App = () => {
 
     loadUserData();
   }, [user, db]);
+
+  // FIX: Remove the useEffect that depended on the apiKey state.
+
+  // FIX: Update function signature with correct types to fix the error.
+  const callGenerativeAI = async (payload: GenerateContentParameters): Promise<GenerateContentResponse> => {
+    // FIX: Simplify error check now that genAI is initialized from env vars.
+    if (!genAI) {
+      throw new Error("The Google AI SDK is not initialized. This might be due to a missing or invalid API key configuration.");
+    }
+    try {
+        const response = await genAI.models.generateContent(payload);
+        return response;
+    } catch (error: any) {
+        console.error("Google GenAI Error:", error);
+        // FIX: Update error message to remove reference to profile/settings page.
+        if (error.message && (error.message.includes('API key not valid') || error.message.includes('invalid'))) {
+            throw new Error("Your Google AI API key seems to be invalid. Please check your configuration.");
+        }
+        throw new Error("An error occurred while communicating with the AI service.");
+    }
+  };
 
   const handleLogout = async () => {
     if (auth) {
@@ -876,11 +826,8 @@ const App = () => {
     updateUserData({ generationHistory: newHistory });
   };
   
-  const updateApiKey = (newApiKey: string) => {
-    setApiKey(newApiKey);
-    updateUserData({ apiKey: newApiKey });
-  };
-  
+  // FIX: Remove updateApiKey function.
+
   const renderContent = () => {
     // Priority 1: Wait for Firebase and Auth state to be ready.
     if (!appReady) {
@@ -904,11 +851,10 @@ const App = () => {
     const renderCurrentView = () => {
         switch (view) {
             case 'create':
-                return <CreateSongView artists={artists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
+                return <CreateSongView artists={artists} callGenerativeAI={callGenerativeAI} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
             case 'manage':
-                return <ManageArtistsView artists={artists} updateArtists={updateArtists} ai={ai} aiError={aiError} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
-            case 'profile':
-                return <ProfileView user={user} apiKey={apiKey} updateApiKey={updateApiKey} />;
+                return <ManageArtistsView artists={artists} updateArtists={updateArtists} callGenerativeAI={callGenerativeAI} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
+            // FIX: Remove 'profile' case.
             default:
                 setView('create'); // Fallback to a default view
                 return null;
@@ -920,7 +866,7 @@ const App = () => {
         <nav className="view-switcher">
           <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
           <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
-          <button className={`btn ${view === 'profile' ? 'active' : ''}`} onClick={() => setView('profile')}>Profile</button>
+          {/* FIX: Remove Profile button. */}
         </nav>
         {renderCurrentView()}
       </>
