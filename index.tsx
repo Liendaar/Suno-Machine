@@ -98,6 +98,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
   const [formName, setFormName] = useState("");
   const [formStyle, setFormStyle] = useState("");
   const [formError, setFormError] = useState("");
+  const [saveConfirmation, setSaveConfirmation] = useState("");
   const [aiComment, setAiComment] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -107,6 +108,7 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
       setFormStyle(editingArtist.style);
       setFormError("");
       setAiComment("");
+      setSaveConfirmation("");
     } else {
       setFormName("");
       setFormStyle("");
@@ -129,22 +131,29 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
 
     if (isDuplicate) {
       setFormError(`An artist with the name "${trimmedName}" already exists.`);
+      setSaveConfirmation("");
       return;
     }
     
+    setFormError("");
     let newArtists: Artist[];
+    let successMessage: string;
     if (editingArtist) {
       newArtists = artists.map((a) =>
           a.id === editingArtist.id ? { ...a, name: trimmedName, style: trimmedStyle } : a
         );
+      successMessage = `Artist "${trimmedName}" updated successfully!`;
     } else {
       newArtists = [
         ...artists,
         { id: Date.now(), name: trimmedName, style: trimmedStyle },
       ];
+      successMessage = `Artist "${trimmedName}" created successfully!`;
     }
     updateArtists(newArtists);
     setEditingArtist(null);
+    setSaveConfirmation(successMessage);
+    setTimeout(() => setSaveConfirmation(""), 3000);
   };
 
   const handleDelete = (id: number) => {
@@ -226,17 +235,18 @@ const ManageArtistsView = ({ artists, updateArtists, ai, aiError, generationHist
         <input
           type="text"
           value={formName}
-          onChange={(e) => { setFormName(e.target.value); setFormError(""); }}
+          onChange={(e) => { setFormName(e.target.value); setFormError(""); setSaveConfirmation(""); }}
           placeholder="Artist Name (e.g., The Midnight)"
         />
         <textarea
           value={formStyle}
-          onChange={(e) => setFormStyle(e.target.value)}
+          onChange={(e) => { setFormStyle(e.target.value); setFormError(""); setSaveConfirmation(""); }}
           placeholder="Describe the artist's style (e.g., Synthwave, nostalgic, cinematic...)"
           rows={4}
         ></textarea>
         
         {formError && <p className="form-error" role="alert">{formError}</p>}
+        {saveConfirmation && <p className="save-success-message" role="status">{saveConfirmation}</p>}
         
         <div className="form-actions">
           <button className="btn btn-primary" onClick={handleSave}>
@@ -381,6 +391,8 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
         return "Completely deconstruct the artist's style. Generate a 'what if?' scenario. What if this artist made a song in a completely unrelated genre? Be bold, abstract, and unpredictable. The connection to the original artist should be artistic and conceptual, not literal.";
     };
     const creativityInstruction = getCreativityInstruction(creativity);
+    const thematicConstraint = "\nIMPORTANT: The song's themes must avoid clichés related to technology, computers, virtual reality, the internet, and electricity. Focus on timeless, human themes like emotions, stories, nature, or abstract concepts.\n";
+    
     const artistHistory = generationHistory[selectedArtistId] || { titles: [], themes: [], lyrics: [] };
     let historyConstraints = "";
     if (artistHistory.titles?.length > 0) historyConstraints += `\n\nCRITICAL: Be creative and original. Avoid generating a song concept similar to these past titles for this artist: "${artistHistory.titles.join('", "')}".`;
@@ -394,14 +406,14 @@ const CreateSongView = ({ artists, ai, aiError, generationHistory, updateGenerat
     let prompt;
     let responseSchema;
     if (isInstrumental) {
-      prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to generate a complete CONCEPT FOR AN INSTRUMENTAL-ONLY song that fits this artist.\n${creativityInstruction}\n`;
+      prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to generate a complete CONCEPT FOR AN INSTRUMENTAL-ONLY song that fits this artist.\n${creativityInstruction}${thematicConstraint}`;
       if (comment) prompt += `Use the following idea or theme for the instrumental's mood: "${comment}".\n`;
       else prompt += `The theme and mood must be completely new and original.\n`;
       prompt += historyConstraints;
       prompt += `The output must be a song concept with a title, a musical style description (MAXIMUM 250 characters), and a detailed structural description for Suno.\nCRITICAL RULE: The structural description in the 'lyrics' field MUST NOT contain any singable words or lyrics. It should only describe the musical sections, instruments, and arrangement.\nIMPORTANT: Format the structural description in a structure readable by Suno for instrumental tracks. This means including tags for song sections like [Intro], [Verse], [Chorus], [Bridge], [Outro], etc. and descriptive musical and instrumental cues in square brackets, for example: [soft piano intro with atmospheric pads] or [energetic synth lead over a driving bassline].\nCRITICAL FORMATTING RULE: ALWAYS add a blank line between song sections (e.g., between the end of the [Intro] section and the start of the [Verse] section). This is mandatory for readability.\n\nHere is a perfect example of the required format for the structural description (to be placed in the 'lyrics' field):\n[Intro]\n[8 bars of atmospheric synth pads building up]\n[A simple, melancholic piano melody enters]\n\n[Verse]\n[The beat kicks in with a steady lo-fi drum machine]\n[A warm, deep bassline carries the harmony]\n[The piano melody continues, slightly more complex]\n\n[Chorus]\n[The energy lifts with layered synths and a soaring lead melody]\n[The drums become more powerful with a driving kick and snare]\n[A subtle string section adds emotional depth]\n\n[Outro]\n[The main elements fade out one by one, starting with the drums]\n[The song ends with the initial piano melody and a final, lingering synth pad chord]\n`;
       responseSchema = { type: Type.OBJECT, properties: { title: { type: Type.STRING }, style: { type: Type.STRING }, lyrics: { type: Type.STRING } }, required: ["title", "style", "lyrics"] };
     } else {
-      prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to generate a complete song concept that fits this artist.\n${creativityInstruction}\n`;
+      prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to generate a complete song concept that fits this artist.\n${creativityInstruction}${thematicConstraint}`;
       if (comment) prompt += `Use the following idea or theme: "${comment}".\n`;
       else prompt += `The theme and lyrics must be completely new and original, telling a different story from any previous request for this artist.\n`;
       prompt += historyConstraints;
