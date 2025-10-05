@@ -74,7 +74,12 @@ interface AuthViewProps {
   db: Firestore;
 }
 
-// FIX: Removed ProfileViewProps as the component is being removed.
+// REVERT: Re-add ProfileViewProps for user-managed API keys.
+interface ProfileViewProps {
+  user: User;
+  apiKey: string | null;
+  updateApiKey: (key: string) => Promise<void>;
+}
 
 interface ResultCardProps {
     id: string;
@@ -553,12 +558,13 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
         
         // Create user document in Firestore
         const userDocRef = doc(db, "users", userCredential.user.uid);
-        // FIX: Remove apiKey from user document on creation.
+        // REVERT: Re-add apiKey to user document on creation.
         await setDoc(userDocRef, {
           artists: [],
           generationHistory: {},
           displayName: trimmedUsername,
           email: trimmedEmail.toLowerCase(),
+          apiKey: "",
         });
       }
     } catch (err: any) {
@@ -586,12 +592,13 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
         const userDocRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(userDocRef);
         if (!docSnap.exists() && user.displayName && user.email) {
-            // FIX: Remove apiKey from user document on creation.
+            // REVERT: Re-add apiKey to user document on creation.
             await setDoc(userDocRef, {
                 artists: [],
                 generationHistory: {},
                 displayName: user.displayName,
                 email: user.email.toLowerCase(),
+                apiKey: "",
             });
         }
         // On success, the onAuthStateChanged listener will handle the UI update,
@@ -654,12 +661,80 @@ const AuthView = ({ auth, db }: AuthViewProps) => {
   );
 };
 
-// FIX: Remove ProfileView component as API key is now handled by environment variables.
+// REVERT: Re-add ProfileView component for managing the API key.
+const ProfileView = ({ user, apiKey, updateApiKey }: ProfileViewProps) => {
+    const [keyInput, setKeyInput] = useState("");
+    const [isKeyVisible, setIsKeyVisible] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+
+    useEffect(() => {
+        setKeyInput(apiKey || "");
+    }, [apiKey]);
+    
+    const handleSave = async () => {
+        setIsSaving(true);
+        setSaveSuccess(false);
+        try {
+            await updateApiKey(keyInput);
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+        } catch (e) {
+            console.error("Failed to save API key", e);
+            alert("There was an error saving your API key. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <div className="profile-view">
+            <div className="form-card">
+                <h3>Your Profile</h3>
+                <div className="profile-info">
+                    <p><strong>Username:</strong> {user.displayName}</p>
+                    <p><strong>Email:</strong> {user.email}</p>
+                </div>
+
+                <div className="api-key-section">
+                    <label htmlFor="api-key-input">Your Google AI API Key</label>
+                    <div className="api-key-input-wrapper">
+                      <input
+                          id="api-key-input"
+                          type={isKeyVisible ? "text" : "password"}
+                          value={keyInput}
+                          onChange={(e) => { setKeyInput(e.target.value); setSaveSuccess(false); }}
+                          placeholder="Enter your API key here"
+                          aria-label="Google AI API Key"
+                      />
+                      <button className="btn btn-secondary btn-show-hide" onClick={() => setIsKeyVisible(!isKeyVisible)}>
+                          {isKeyVisible ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    <p className="help-text">
+                        The AI features in this app require a Google AI API key.
+                        Your key is stored securely in your user document in Firestore and is only used by you.
+                        You can get a key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.
+                    </p>
+                </div>
+                
+                {saveSuccess && <p className="save-success-message">API Key saved successfully!</p>}
+                
+                <div className="form-actions">
+                    <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? 'Saving...' : 'Save API Key'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Main App Component ---
 const App = () => {
-  // FIX: Remove 'profile' from view state as the view is removed.
-  const [view, setView] = useState<'create' | 'manage'>('create');
+  // REVERT: Re-add 'profile' to view state.
+  const [view, setView] = useState<'create' | 'manage' | 'profile'>('create');
   const [artists, setArtists] = useState<Artist[]>([]);
   const [generationHistory, setGenerationHistory] = useState<GenerationHistory>({});
   
@@ -668,22 +743,24 @@ const App = () => {
   const [auth, setAuth] = useState<Auth | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [appReady, setAppReady] = useState(false); // Unified loading state for auth
+  const [appReady, setAppReady] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
-  // FIX: Remove apiKey state. The key will come from process.env.
+  // REVERT: Re-add apiKey state for user-managed keys.
+  const [apiKey, setApiKey] = useState<string | null>(null);
   
-  // FIX: Initialize the GoogleGenAI client using an environment variable.
-  // This is safer and aligns with best practices.
+  // REVERT: Initialize GoogleGenAI based on the user's API key from state.
   const genAI = useMemo(() => {
-    try {
-        // As per guidelines, API_KEY is assumed to be in the environment.
-        return new GoogleGenAI({ apiKey: process.env.API_KEY! });
-    } catch (e) {
-        console.error("Failed to initialize GoogleGenAI:", e);
-        alert("Failed to initialize Google AI. The API_KEY environment variable might be missing or invalid.");
-        return null;
+    if (apiKey) {
+        try {
+            return new GoogleGenAI({ apiKey });
+        } catch (e) {
+            console.error("Failed to initialize GoogleGenAI:", e);
+            alert("The provided API key is malformed. Please check it in your profile.");
+            return null;
+        }
     }
-  }, []);
+    return null;
+  }, [apiKey]);
 
 
   // Initialize Firebase
@@ -724,7 +801,8 @@ const App = () => {
       // Clear data on logout
       setArtists([]);
       setGenerationHistory({});
-      // FIX: Remove apiKey state update.
+      // REVERT: Clear apiKey on logout.
+      setApiKey(null);
       return;
     }
     
@@ -738,17 +816,19 @@ const App = () => {
           const data = docSnap.data();
           setArtists(data.artists || []);
           setGenerationHistory(data.generationHistory || {});
-          // FIX: Remove apiKey loading.
+          // REVERT: Load API key from user's document.
+          setApiKey(data.apiKey || null);
           
           if (!data.email && user.email) {
             await setDoc(userDocRef, { email: user.email.toLowerCase() }, { merge: true });
           }
 
         } else if (user.displayName && user.email) {
-          // FIX: Remove apiKey on new user document creation.
-          await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase() });
+          // REVERT: Add apiKey on new user document creation.
+          await setDoc(userDocRef, { artists: [], generationHistory: {}, displayName: user.displayName, email: user.email.toLowerCase(), apiKey: "" });
           setArtists([]);
           setGenerationHistory({});
+          setApiKey(null);
         }
       } catch (e: any) {
         console.error("Error loading user data:", e);
@@ -769,22 +849,18 @@ const App = () => {
     loadUserData();
   }, [user, db]);
 
-  // FIX: Remove the useEffect that depended on the apiKey state.
-
-  // FIX: Update function signature with correct types to fix the error.
   const callGenerativeAI = async (payload: GenerateContentParameters): Promise<GenerateContentResponse> => {
-    // FIX: Simplify error check now that genAI is initialized from env vars.
-    if (!genAI) {
-      throw new Error("The Google AI SDK is not initialized. This might be due to a missing or invalid API key configuration.");
+    // REVERT: Update error check to guide user to Profile page.
+    if (!apiKey || !genAI) {
+      throw new Error("Your Google AI API key is missing or invalid. Please add it in your Profile.");
     }
     try {
         const response = await genAI.models.generateContent(payload);
         return response;
     } catch (error: any) {
         console.error("Google GenAI Error:", error);
-        // FIX: Update error message to remove reference to profile/settings page.
         if (error.message && (error.message.includes('API key not valid') || error.message.includes('invalid'))) {
-            throw new Error("Your Google AI API key seems to be invalid. Please check your configuration.");
+            throw new Error("Your Google AI API key is invalid. Please check it in your Profile.");
         }
         throw new Error("An error occurred while communicating with the AI service.");
     }
@@ -826,7 +902,11 @@ const App = () => {
     updateUserData({ generationHistory: newHistory });
   };
   
-  // FIX: Remove updateApiKey function.
+  // REVERT: Re-add updateApiKey function.
+  const updateApiKey = async (key: string) => {
+    setApiKey(key);
+    await updateUserData({ apiKey: key });
+  };
 
   const renderContent = () => {
     // Priority 1: Wait for Firebase and Auth state to be ready.
@@ -854,7 +934,9 @@ const App = () => {
                 return <CreateSongView artists={artists} callGenerativeAI={callGenerativeAI} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
             case 'manage':
                 return <ManageArtistsView artists={artists} updateArtists={updateArtists} callGenerativeAI={callGenerativeAI} generationHistory={generationHistory} updateGenerationHistory={updateGenerationHistory} />;
-            // FIX: Remove 'profile' case.
+            // REVERT: Re-add 'profile' case.
+            case 'profile':
+                return <ProfileView user={user} apiKey={apiKey} updateApiKey={updateApiKey} />;
             default:
                 setView('create'); // Fallback to a default view
                 return null;
@@ -866,7 +948,8 @@ const App = () => {
         <nav className="view-switcher">
           <button className={`btn ${view === 'create' ? 'active' : ''}`} onClick={() => setView('create')}>Create Song</button>
           <button className={`btn ${view === 'manage' ? 'active' : ''}`} onClick={() => setView('manage')}>Manage Artists</button>
-          {/* FIX: Remove Profile button. */}
+          {/* REVERT: Re-add Profile button. */}
+          <button className={`btn ${view === 'profile' ? 'active' : ''}`} onClick={() => setView('profile')}>Profile</button>
         </nav>
         {renderCurrentView()}
       </>
