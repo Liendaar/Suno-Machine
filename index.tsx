@@ -347,9 +347,20 @@ const CreateSongView = ({ artists, callGenerativeAI, generationHistory, updateGe
     setError(null);
     try {
         const artistHistory = generationHistory[selectedArtistId] || { titles: [], themes: [], lyrics: [] };
-        let prompt = `You are a creative muse for songwriters. The artist is "${selectedArtist.name}" and their style is "${selectedArtist.style}". Generate a single, concise, and evocative song theme or concept. The theme should be a short phrase, perfect for inspiring a song. CRITICAL: The final output must start with either "a song about" or "a track about". Do not add any other preamble, explanation, or quotation marks. For example: "a song about a forgotten astronaut watching Earth from afar".`;
+        let prompt = `You are a creative muse for songwriters. The artist is "${selectedArtist.name}" and their style is "${selectedArtist.style}". Generate a single, concise, and evocative song theme. The theme should be a very short phrase, ideally 2 to 5 words long.
+
+CRITICAL:
+- Do NOT start with "a song about" or "a track about".
+- Provide only the theme itself, without any preamble, explanation, or quotation marks.
+
+Examples of good themes:
+- "Forgotten Astronaut"
+- "Midnight Train to Nowhere"
+- "City of Glass"
+- "Echoes in the Rain"`;
         if (artistHistory.themes?.length > 0) {
-            prompt += `\n\nIMPORTANT: Avoid themes similar to these past suggestions for this artist: "${artistHistory.themes.join('", "')}". Be original.`;
+            const cleanedThemes = artistHistory.themes.map(t => t.replace(/^(a song about|a track about)\s*/i, '').trim());
+            prompt += `\n\nIMPORTANT: Avoid themes similar to these past suggestions for this artist: "${cleanedThemes.join('", "')}". Be original.`;
         }
         
         const payload: GenerateContentParameters = { model: 'gemini-2.5-flash', contents: prompt };
@@ -561,7 +572,7 @@ const CreateSongView = ({ artists, callGenerativeAI, generationHistory, updateGe
           )}
         </select>
         <div className="comment-container">
-          <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment (e.g., a song about a lost city)" aria-label="Optional comment" />
+          <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional theme (e.g., a lost city)" aria-label="Optional theme" />
            <button onClick={handleSuggestTheme} className="btn-suggest" title="Suggest a theme" disabled={isSuggesting || artists.length === 0 || !selectedArtistId}>
               {isSuggesting ? <div className="spinner-small"></div> : '💡'}
           </button>
