@@ -87,6 +87,8 @@ interface ResultCardProps {
     content: string;
     onCopy: (content: string, buttonId: string) => void;
     isLarge?: boolean;
+    onRegenerate?: (id: string) => void;
+    isRegenerating?: boolean;
 }
 
 interface SongData {
@@ -319,6 +321,7 @@ const CreateSongView = ({ artists, callGenerativeAI, generationHistory, updateGe
   const [isLoading, setIsLoading] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState<'title' | 'style' | 'lyrics' | null>(null);
   
   const creativityLevels: { [key: number]: string } = {
     0: 'Identical', 25: 'Subtle', 50: 'Inspired',
@@ -458,6 +461,95 @@ const CreateSongView = ({ artists, callGenerativeAI, generationHistory, updateGe
     }
   }, []);
 
+  const handleRegenerate = useCallback(async (field: 'title' | 'style' | 'lyrics') => {
+    const selectedArtist = artists.find(a => a.id.toString() === selectedArtistId);
+    if (!selectedArtist || !songData) {
+        setError("Cannot regenerate: missing artist or song data.");
+        return;
+    }
+
+    setIsRegenerating(field);
+    setError(null);
+
+    const getCreativityInstruction = (level: number) => {
+        if (level === 0) return "Adhere as strictly as possible to the artist's established style provided. The output should be a textbook example of their sound.";
+        if (level === 25) return "Stay close to the artist's core style, but introduce one or two subtle, fresh elements. It should feel familiar yet new.";
+        if (level === 50) return "Use the artist's style as a strong starting point, but feel free to blend in a complementary genre or experiment with song structure. This is an evolution of their sound.";
+        if (level === 75) return "Take significant creative liberties. The artist's core style should be recognizable as a faint echo, but the primary focus is on innovation and unexpected fusion of genres.";
+        return "Completely deconstruct the artist's style. Generate a 'what if?' scenario. What if this artist made a song in a completely unrelated genre? Be bold, abstract, and unpredictable. The connection to the original artist should be artistic and conceptual, not literal.";
+    };
+    const creativityInstruction = getCreativityInstruction(creativity);
+    const thematicConstraint = "\nIMPORTANT: The song's themes must avoid clichés related to technology, computers, virtual reality, the internet, and electricity. Focus on timeless, human themes like emotions, stories, nature, or abstract concepts.\n";
+
+    let prompt = "";
+    let responseSchema: any;
+    const artistHistory = generationHistory[selectedArtistId] || { titles: [], themes: [], lyrics: [] };
+
+    switch(field) {
+        case 'title':
+            prompt = `You are a creative naming expert for music. Your task is to generate a new, compelling title for an existing song concept.\n\nArtist: "${selectedArtist.name}"\nStyle: "${songData.style}"\nLyrics Snippet: "${songData.lyrics.substring(0, 300)}..."\n\nThe previous title was: "${songData.title}". Please generate a completely different title that fits the provided style and lyrics.\n\nReturn the result as a JSON object with a single "title" key.`;
+            if (artistHistory.titles?.length > 0) {
+              prompt += `\nAvoid titles similar to these past titles for this artist: "${artistHistory.titles.join('", "')}".`;
+            }
+            responseSchema = { type: Type.OBJECT, properties: { title: { type: Type.STRING } }, required: ["title"] };
+            break;
+        case 'style':
+            prompt = `You are a music journalist with a deep understanding of genres. Your task is to write a new, concise musical style description (MAXIMUM 250 characters) for an existing song concept.\n\nArtist: "${selectedArtist.name}"\nTitle: "${songData.title}"\nLyrics Snippet: "${songData.lyrics.substring(0, 300)}..."\n\nThe previous style description was: "${songData.style}". Please write a different but fitting description that still aligns with the artist's core identity: "${selectedArtist.style}".\n\nReturn the result as a JSON object with a single "style" key.`;
+            responseSchema = { type: Type.OBJECT, properties: { style: { type: Type.STRING } }, required: ["style"] };
+            break;
+        case 'lyrics':
+            const lyricSnippets = artistHistory.lyrics.map(lyric => {
+                 const cleaned = lyric.replace(/\[.*?\]|\(.*?\)/g, ' ').replace(/\s+/g, ' ').trim();
+                 return cleaned.substring(0, 150);
+            }).join('"; "');
+            let historyConstraints = `\nAlso avoid lyrical themes or concepts similar to these previous songs: "${lyricSnippets}".`;
+
+            if (isInstrumental) {
+                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REGENERATE a complete CONCEPT FOR AN INSTRUMENTAL-ONLY song titled "${songData.title}".\n${creativityInstruction}${thematicConstraint}\nUse the following idea or theme for the instrumental's mood: "${comment}".\n${historyConstraints}\nCRITICAL: The new structural description must be substantially different from the previous one, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new, detailed structural description for Suno. It must only describe musical sections, instruments, and arrangement. Do not include singable words. Format it with tags like [Intro], [Verse], etc., with blank lines between sections. Be creative with the structure. Return the result as a JSON object with a single "lyrics" key.`;
+            } else {
+                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REWRITE the lyrics for a song concept titled "${songData.title}". Keep the original theme but provide a fresh lyrical take.\nUse the following idea or theme: "${comment}".\n${creativityInstruction}${thematicConstraint}${historyConstraints}\nCRITICAL: The new lyrics must be substantially different from the previous version, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new set of full lyrics, formatted for Suno (with section tags like [Verse 1], (Chorus), etc., and a blank line between sections). Return the result as a JSON object with a single "lyrics" key.`;
+            }
+            responseSchema = { type: Type.OBJECT, properties: { lyrics: { type: Type.STRING } }, required: ["lyrics"] };
+            break;
+    }
+
+    try {
+        const payload: GenerateContentParameters = {
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: "application/json", responseSchema: responseSchema },
+        };
+        const response = await callGenerativeAI(payload);
+        const responseText = response.text.trim();
+        const parsedData = JSON.parse(responseText);
+
+        setSongData(prevData => {
+            if (!prevData) return null;
+            const updatedData = { ...prevData, ...parsedData };
+            
+            const newHistory = { ...generationHistory };
+            const artistId = selectedArtist.id.toString();
+            if (!newHistory[artistId]) newHistory[artistId] = { titles: [], themes: [], lyrics: [] };
+            if (field === 'title' && parsedData.title) {
+                newHistory[artistId].titles.push(parsedData.title);
+            }
+            if (field === 'lyrics' && parsedData.lyrics) {
+                newHistory[artistId].lyrics.push(parsedData.lyrics);
+            }
+            updateGenerationHistory(newHistory);
+
+            return updatedData;
+        });
+
+    } catch (e) {
+        console.error(`Error regenerating ${field}:`, e);
+        setError(e.message || `Failed to regenerate the ${field}. Please try again.`);
+    } finally {
+        setIsRegenerating(null);
+    }
+  }, [selectedArtistId, artists, songData, callGenerativeAI, generationHistory, updateGenerationHistory, creativity, comment, isInstrumental]);
+
+
   return (
     <>
       <div className="input-container">
@@ -492,9 +584,31 @@ const CreateSongView = ({ artists, callGenerativeAI, generationHistory, updateGe
         {!isLoading && !songData && (<div className="placeholder-results">Your generated song will appear here.</div>)}
         {songData && (
           <div className="song-output">
-            <ResultCard id="title" title="🎤 Title" content={songData.title} onCopy={handleCopy} />
-            <ResultCard id="style" title="🎸 Style" content={songData.style} onCopy={handleCopy} />
-            <ResultCard id="lyrics" title="📜 Lyrics" content={songData.lyrics} onCopy={handleCopy} isLarge={true} />
+            <ResultCard 
+                id="title" 
+                title="🎤 Title" 
+                content={songData.title} 
+                onCopy={handleCopy}
+                onRegenerate={() => handleRegenerate('title')}
+                isRegenerating={isRegenerating === 'title'}
+            />
+            <ResultCard 
+                id="style" 
+                title="🎸 Style" 
+                content={songData.style} 
+                onCopy={handleCopy}
+                onRegenerate={() => handleRegenerate('style')}
+                isRegenerating={isRegenerating === 'style'}
+            />
+            <ResultCard 
+                id="lyrics" 
+                title="📜 Lyrics" 
+                content={songData.lyrics} 
+                onCopy={handleCopy} 
+                isLarge={true}
+                onRegenerate={() => handleRegenerate('lyrics')}
+                isRegenerating={isRegenerating === 'lyrics'}
+            />
           </div>
         )}
       </div>
@@ -981,19 +1095,41 @@ const App = () => {
   );
 };
 
-const ResultCard = ({ id, title, content, onCopy, isLarge = false }: ResultCardProps) => (
+const ResultCard = ({ id, title, content, onCopy, isLarge = false, onRegenerate, isRegenerating }: ResultCardProps) => (
     <div id={id} className={`result-card ${isLarge ? 'large' : ''}`}>
+        {isRegenerating && (
+            <div className="spinner-overlay-small">
+                <div className="spinner"></div>
+            </div>
+        )}
         <div className="result-header">
             <h2>{title}</h2>
-            <button id={`copy-${id}`} className="btn btn-copy" onClick={() => onCopy(content, `copy-${id}`)} disabled={!content}>
-                Copy
-            </button>
+            <div className="result-header-actions">
+                {onRegenerate && (
+                    <button
+                        id={`regenerate-${id}`}
+                        className="btn btn-icon btn-regenerate-part"
+                        onClick={() => onRegenerate(id)}
+                        disabled={!content || isRegenerating}
+                        title={`Regenerate ${title}`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                          <path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
+                          <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
+                        </svg>
+                    </button>
+                )}
+                <button id={`copy-${id}`} className="btn btn-copy" onClick={() => onCopy(content, `copy-${id}`)} disabled={!content}>
+                    Copy
+                </button>
+            </div>
         </div>
         <div className="result-content" aria-live="polite">
             {content}
         </div>
     </div>
 );
+
 
 const root = createRoot(document.getElementById("root")!);
 root.render(<App />);
