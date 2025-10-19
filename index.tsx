@@ -418,14 +418,41 @@ Examples of good themes:
       if (comment) prompt += `Use the following idea or theme for the instrumental's mood: "${comment}".\n`;
       else prompt += `The theme and mood must be completely new and original.\n`;
       prompt += historyConstraints;
-      prompt += `The output must be a song concept with a title, a musical style description (MAXIMUM 250 characters), and a detailed structural description for Suno.\nCRITICAL RULE: The structural description in the 'lyrics' field MUST NOT contain any singable words or lyrics. It should only describe the musical sections, instruments, and arrangement.\nIMPORTANT: Format the structural description in a structure readable by Suno for instrumental tracks. This means including tags for song sections like [Intro], [Verse], [Chorus], [Bridge], [Outro], etc. and descriptive musical and instrumental cues in square brackets, for example: [soft piano intro with atmospheric pads] or [energetic synth lead over a driving bassline].\nCRITICAL FORMATTING RULE: ALWAYS add a blank line between song sections (e.g., between the end of the [Intro] section and the start of the [Verse] section). This is mandatory for readability.\n\nBe creative with the song structure. A simple [Intro]-[Verse]-[Chorus]-[Outro] is not always necessary. The structure should create a dynamic journey for the listener. Think about tension and release, building complexity, and creating a distinct mood for each section.\n\nHere are some examples of possible structural approaches:\n- A simple, evolving structure: [Intro] -> [Groove A] -> [Groove A with new layer] -> [Breakdown] -> [Groove B] -> [Outro]\n- A narrative structure: [Exposition] -> [Rising Action] -> [Climax] -> [Falling Action] -> [Resolution]\n- A classic song structure: [Intro] -> [Verse Theme] -> [Chorus Theme] -> [Verse Theme 2] -> [Chorus Theme] -> [Bridge] -> [Solo] -> [Outro]\n\nUse descriptive cues to outline the instrumentation, dynamics, and feel of each section. For example: [delicate piano melody enters over a sparse beat] or [heavy distorted guitars take over with a powerful drum fill].`;
+      prompt += `The output must be a song concept with a title, a musical style description (MAXIMUM 250 characters), and a detailed structural description for Suno.\nCRITICAL RULE: The structural description in the 'lyrics' field MUST NOT contain any singable words or lyrics. It should only describe the musical sections, instruments, and arrangement.
+
+NEW REQUIREMENT: The structural description should be comprehensive and long enough to describe a full song of approximately 3 to 4 minutes. Aim for at least 12-16 distinct structural lines/sections (e.g., [Intro], [Verse 1 Theme], [Verse 1 Development], [Pre-Chorus Build], [Chorus 1], etc.). Be very descriptive about the instrumentation, dynamics (loud/soft), and energy level throughout the song.
+
+ABSOLUTELY CRITICAL FORMATTING RULES:
+- Use section tags like [Intro], [Verse Theme], [Chorus Theme], [Bridge], [Outro], etc.
+- YOU MUST add a single blank line between song sections. This is not optional.
+
+EXAMPLE OF **CORRECT** FORMATTING:
+[Intro]
+[soft, atmospheric synth pads with a slow, delayed piano melody]
+
+[Verse Theme]
+[a gentle 4/4 drum beat enters. a simple, melodic bassline carries the harmony]
+
+EXAMPLE OF **INCORRECT** FORMATTING (DO NOT DO THIS):
+[Intro][soft, atmospheric synth pads...][Verse Theme][a gentle 4/4 drum beat...]
+
+ALWAYS follow the CORRECT formatting example.
+
+Be creative with the song structure. A simple [Intro]-[Verse]-[Chorus]-[Outro] is not always necessary. The structure should create a dynamic journey for the listener. Think about tension and release, building complexity, and creating a distinct mood for each section.
+
+Here are some examples of possible structural approaches:
+- A simple, evolving structure: [Intro] -> [Groove A] -> [Groove A with new layer] -> [Breakdown] -> [Groove B] -> [Outro]
+- A narrative structure: [Exposition] -> [Rising Action] -> [Climax] -> [Falling Action] -> [Resolution]
+- A classic song structure: [Intro] -> [Verse Theme] -> [Chorus Theme] -> [Verse Theme 2] -> [Chorus Theme] -> [Bridge] -> [Solo] -> [Outro]
+
+Use descriptive cues to outline the instrumentation, dynamics, and feel of each section. For example: [delicate piano melody enters over a sparse beat] or [heavy distorted guitars take over with a powerful drum fill].`;
       responseSchema = { type: Type.OBJECT, properties: { title: { type: Type.STRING }, style: { type: Type.STRING }, lyrics: { type: Type.STRING } }, required: ["title", "style", "lyrics"] };
     } else {
       prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to generate a complete song concept that fits this artist.\n${creativityInstruction}${thematicConstraint}`;
       if (comment) prompt += `Use the following idea or theme: "${comment}".\n`;
       else prompt += `The theme and lyrics must be completely new and original, telling a different story from any previous request for this artist.\n`;
       prompt += historyConstraints;
-      prompt += `The output must be a song with a title, a musical style description (MAXIMUM 250 characters), and full lyrics.\nCRITICAL RULE: The lyrics MUST NOT mention the artist's name or the song's genre/style. The story and emotion should stand on their own.\nThe lyrics must be in English unless another language is explicitly requested in the comment.\n\nIMPORTANT: Format the lyrics in a structure readable by Suno. This means including tags for song sections like (Intro), [Verse 1], (Chorus), (Pre-Chorus), [Bridge], (Outro), etc. Also, include descriptive musical and instrumental cues in square brackets, for example: [soft piano intro] or [upbeat synth solo with heavy drums].\nCRITICAL FORMATTING RULE: ALWAYS add a blank line between song sections (e.g., between the end of the (Chorus) section and the start of the [Verse 2] section). This is mandatory for readability.\n\nBe creative with the song structure. You do not need to follow a traditional verse-chorus-verse structure. Feel free to use less common structures like AABA, or a more progressive structure that builds over time. The structure should serve the song's narrative and emotional arc.\n\nFor example, you could use structures like:\n- Intro -> Verse 1 -> Pre-Chorus -> Chorus -> Verse 2 -> Pre-Chorus -> Chorus -> Bridge -> Guitar Solo -> Chorus -> Outro\n- Intro -> Part A -> Part B (builds) -> Part C (climax) -> Outro\n- Verse 1 -> Verse 2 -> Bridge -> Verse 3\n\nEnsure the lyrics are well-written, evocative, and fit the artist's style.`;
+      prompt += `The output must be a song with a title, a musical style description (MAXIMUM 250 characters), and full lyrics.\nCRITICAL RULE: The lyrics MUST NOT mention the artist's name or the song's genre/style. The story and emotion should stand on their own.\nThe lyrics must be in English unless another language is explicitly requested in the comment.\n\nABSOLUTELY CRITICAL FORMATTING RULES:\n- Use section tags like [Verse 1], (Chorus), [Bridge], (Outro), etc.\n- YOU MUST add a single blank line between song sections. This is not optional.\n\nEXAMPLE OF **CORRECT** FORMATTING:\n[Verse 1]\nA single light flickers in the dark\nAnother night, another faded mark\n\n(Chorus)\nWe run through streets of silver and of rust\nTurning memories into dust\n\nEXAMPLE OF **INCORRECT** FORMATTING (DO NOT DO THIS):\n[Verse 1]A single light flickers in the dark\n(Chorus)We run through streets of silver and of rust\n\nALWAYS follow the CORRECT formatting example.\n\nBe creative with the song structure. You do not need to follow a traditional verse-chorus-verse structure. Feel free to use less common structures like AABA, or a more progressive structure that builds over time. The structure should serve the song's narrative and emotional arc.\n\nFor example, you could use structures like:\n- Intro -> Verse 1 -> Pre-Chorus -> Chorus -> Verse 2 -> Pre-Chorus -> Chorus -> Bridge -> Guitar Solo -> Chorus -> Outro\n- Intro -> Part A -> Part B (builds) -> Part C (climax) -> Outro\n- Verse 1 -> Verse 2 -> Bridge -> Verse 3\n\nEnsure the lyrics are well-written, evocative, and fit the artist's style.`;
       responseSchema = { type: Type.OBJECT, properties: { title: { type: Type.STRING }, style: { type: Type.STRING }, lyrics: { type: Type.STRING } }, required: ["title", "style", "lyrics"] };
     }
     try {
@@ -516,9 +543,24 @@ Examples of good themes:
             let historyConstraints = `\nAlso avoid lyrical themes or concepts similar to these previous songs: "${lyricSnippets}".`;
 
             if (isInstrumental) {
-                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REGENERATE a complete CONCEPT FOR AN INSTRUMENTAL-ONLY song titled "${songData.title}".\n${creativityInstruction}${thematicConstraint}\nUse the following idea or theme for the instrumental's mood: "${comment}".\n${historyConstraints}\nCRITICAL: The new structural description must be substantially different from the previous one, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new, detailed structural description for Suno. It must only describe musical sections, instruments, and arrangement. Do not include singable words. Format it with tags like [Intro], [Verse], etc., with blank lines between sections. Be creative with the structure. Return the result as a JSON object with a single "lyrics" key.`;
+                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REGENERATE a complete CONCEPT FOR AN INSTRUMENTAL-ONLY song titled "${songData.title}".\n${creativityInstruction}${thematicConstraint}\nUse the following idea or theme for the instrumental's mood: "${comment}".\n${historyConstraints}\nCRITICAL: The new structural description must be substantially different from the previous one, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new, detailed structural description. Do not include singable words.
+
+NEW REQUIREMENT: The structural description should be comprehensive and long enough to describe a full song of approximately 3 to 4 minutes. Aim for at least 12-16 distinct structural lines/sections (e.g., [Intro], [Verse 1 Theme], [Verse 1 Development], [Pre-Chorus Build], [Chorus 1], etc.). Be very descriptive about the instrumentation, dynamics (loud/soft), and energy level throughout the song.
+
+ABSOLUTELY CRITICAL FORMATTING RULES:
+- Use section tags like [Intro], [Verse Theme], [Chorus Theme], etc.
+- YOU MUST add a single blank line between song sections.
+
+EXAMPLE OF CORRECT FORMATTING:
+[Intro]
+[soft synth pads]
+
+[Verse Theme]
+[a gentle drum beat enters]
+
+ALWAYS follow this formatting. Return the result as a JSON object with a single "lyrics" key.`;
             } else {
-                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REWRITE the lyrics for a song concept titled "${songData.title}". Keep the original theme but provide a fresh lyrical take.\nUse the following idea or theme: "${comment}".\n${creativityInstruction}${thematicConstraint}${historyConstraints}\nCRITICAL: The new lyrics must be substantially different from the previous version, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new set of full lyrics, formatted for Suno (with section tags like [Verse 1], (Chorus), etc., and a blank line between sections). Return the result as a JSON object with a single "lyrics" key.`;
+                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REWRITE the lyrics for a song concept titled "${songData.title}". Keep the original theme but provide a fresh lyrical take.\nUse the following idea or theme: "${comment}".\n${creativityInstruction}${thematicConstraint}${historyConstraints}\nCRITICAL: The new lyrics must be substantially different from the previous version, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new set of full lyrics.\n\nABSOLUTELY CRITICAL FORMATTING RULES:\n- Use section tags like [Verse 1], (Chorus), etc.\n- YOU MUST add a single blank line between song sections.\n\nEXAMPLE OF CORRECT FORMATTING:\n[Verse 1]\nNew words for a lonely night\n\n(Chorus)\nA different tune in fading light\n\nALWAYS follow this formatting. Return the result as a JSON object with a single "lyrics" key.`;
             }
             responseSchema = { type: Type.OBJECT, properties: { lyrics: { type: Type.STRING } }, required: ["lyrics"] };
             break;
