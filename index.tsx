@@ -316,6 +316,7 @@ const CreateSongView = ({ artists, callGenerativeAI, generationHistory, updateGe
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [comment, setComment] = useState("");
   const [isInstrumental, setIsInstrumental] = useState(false);
+  const [language, setLanguage] = useState("English");
   const [creativity, setCreativity] = useState(25);
   const [songData, setSongData] = useState<SongData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -452,7 +453,7 @@ Use descriptive cues to outline the instrumentation, dynamics, and feel of each 
       if (comment) prompt += `Use the following idea or theme: "${comment}".\n`;
       else prompt += `The theme and lyrics must be completely new and original, telling a different story from any previous request for this artist.\n`;
       prompt += historyConstraints;
-      prompt += `The output must be a song with a title, a musical style description (MAXIMUM 250 characters), and full lyrics.\nCRITICAL RULE: The lyrics MUST NOT mention the artist's name or the song's genre/style. The story and emotion should stand on their own.\nThe lyrics must be in English unless another language is explicitly requested in the comment.\n\nABSOLUTELY CRITICAL FORMATTING RULES:\n- Use section tags like [Verse 1], (Chorus), [Bridge], (Outro), etc.\n- YOU MUST add a single blank line between song sections. This is not optional.\n\nEXAMPLE OF **CORRECT** FORMATTING:\n[Verse 1]\nA single light flickers in the dark\nAnother night, another faded mark\n\n(Chorus)\nWe run through streets of silver and of rust\nTurning memories into dust\n\nEXAMPLE OF **INCORRECT** FORMATTING (DO NOT DO THIS):\n[Verse 1]A single light flickers in the dark\n(Chorus)We run through streets of silver and of rust\n\nALWAYS follow the CORRECT formatting example.\n\nBe creative with the song structure. You do not need to follow a traditional verse-chorus-verse structure. Feel free to use less common structures like AABA, or a more progressive structure that builds over time. The structure should serve the song's narrative and emotional arc.\n\nFor example, you could use structures like:\n- Intro -> Verse 1 -> Pre-Chorus -> Chorus -> Verse 2 -> Pre-Chorus -> Chorus -> Bridge -> Guitar Solo -> Chorus -> Outro\n- Intro -> Part A -> Part B (builds) -> Part C (climax) -> Outro\n- Verse 1 -> Verse 2 -> Bridge -> Verse 3\n\nEnsure the lyrics are well-written, evocative, and fit the artist's style.`;
+      prompt += `The output must be a song with a title, a musical style description (MAXIMUM 250 characters), and full lyrics.\nCRITICAL RULE: The lyrics MUST NOT mention the artist's name or the song's genre/style. The story and emotion should stand on their own.\nThe title and lyrics MUST be in ${language}.\n\nABSOLUTELY CRITICAL FORMATTING RULES:\n- Use section tags like [Verse 1], (Chorus), [Bridge], (Outro), etc.\n- YOU MUST add a single blank line between song sections. This is not optional.\n\nEXAMPLE OF **CORRECT** FORMATTING:\n[Verse 1]\nA single light flickers in the dark\nAnother night, another faded mark\n\n(Chorus)\nWe run through streets of silver and of rust\nTurning memories into dust\n\nEXAMPLE OF **INCORRECT** FORMATTING (DO NOT DO THIS):\n[Verse 1]A single light flickers in the dark\n(Chorus)We run through streets of silver and of rust\n\nALWAYS follow the CORRECT formatting example.\n\nBe creative with the song structure. You do not need to follow a traditional verse-chorus-verse structure. Feel free to use less common structures like AABA, or a more progressive structure that builds over time. The structure should serve the song's narrative and emotional arc.\n\nFor example, you could use structures like:\n- Intro -> Verse 1 -> Pre-Chorus -> Chorus -> Verse 2 -> Pre-Chorus -> Chorus -> Bridge -> Guitar Solo -> Chorus -> Outro\n- Intro -> Part A -> Part B (builds) -> Part C (climax) -> Outro\n- Verse 1 -> Verse 2 -> Bridge -> Verse 3\n\nEnsure the lyrics are well-written, evocative, and fit the artist's style.`;
       responseSchema = { type: Type.OBJECT, properties: { title: { type: Type.STRING }, style: { type: Type.STRING }, lyrics: { type: Type.STRING } }, required: ["title", "style", "lyrics"] };
     }
     try {
@@ -478,7 +479,7 @@ Use descriptive cues to outline the instrumentation, dynamics, and feel of each 
     } finally {
       setIsLoading(false);
     }
-  }, [selectedArtistId, comment, artists, callGenerativeAI, isInstrumental, generationHistory, updateGenerationHistory, creativity]);
+  }, [selectedArtistId, comment, artists, callGenerativeAI, isInstrumental, generationHistory, updateGenerationHistory, creativity, language]);
   
   const handleCopy = useCallback(async (content: string, buttonId: string) => {
     if (!content) return;
@@ -525,7 +526,7 @@ Use descriptive cues to outline the instrumentation, dynamics, and feel of each 
 
     switch(field) {
         case 'title':
-            prompt = `You are a creative naming expert for music. Your task is to generate a new, compelling title for an existing song concept.\n\nArtist: "${selectedArtist.name}"\nStyle: "${songData.style}"\nLyrics Snippet: "${songData.lyrics.substring(0, 300)}..."\n\nThe previous title was: "${songData.title}". Please generate a completely different title that fits the provided style and lyrics.\n\nReturn the result as a JSON object with a single "title" key.`;
+            prompt = `You are a creative naming expert for music. Your task is to generate a new, compelling title in ${language} for an existing song concept.\n\nArtist: "${selectedArtist.name}"\nStyle: "${songData.style}"\nLyrics Snippet: "${songData.lyrics.substring(0, 300)}..."\n\nThe previous title was: "${songData.title}". Please generate a completely different title that fits the provided style and lyrics.\n\nReturn the result as a JSON object with a single "title" key.`;
             if (artistHistory.titles?.length > 0) {
               prompt += `\nAvoid titles similar to these past titles for this artist: "${artistHistory.titles.join('", "')}".`;
             }
@@ -560,7 +561,7 @@ EXAMPLE OF CORRECT FORMATTING:
 
 ALWAYS follow this formatting. Return the result as a JSON object with a single "lyrics" key.`;
             } else {
-                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REWRITE the lyrics for a song concept titled "${songData.title}". Keep the original theme but provide a fresh lyrical take.\nUse the following idea or theme: "${comment}".\n${creativityInstruction}${thematicConstraint}${historyConstraints}\nCRITICAL: The new lyrics must be substantially different from the previous version, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new set of full lyrics.\n\nABSOLUTELY CRITICAL FORMATTING RULES:\n- Use section tags like [Verse 1], (Chorus), etc.\n- YOU MUST add a single blank line between song sections.\n\nEXAMPLE OF CORRECT FORMATTING:\n[Verse 1]\nNew words for a lonely night\n\n(Chorus)\nA different tune in fading light\n\nALWAYS follow this formatting. Return the result as a JSON object with a single "lyrics" key.`;
+                prompt = `You are a songwriter for the artist "${selectedArtist.name}". Their signature style is: "${selectedArtist.style}".\nYour task is to REWRITE the lyrics for a song concept titled "${songData.title}". Keep the original theme but provide a fresh lyrical take.\nUse the following idea or theme: "${comment}".\n${creativityInstruction}${thematicConstraint}${historyConstraints}\nCRITICAL: The new lyrics must be in ${language} and be substantially different from the previous version, which started with: "${songData.lyrics.substring(0, 150)}...".\n\nThe output must be a new set of full lyrics.\n\nABSOLUTELY CRITICAL FORMATTING RULES:\n- Use section tags like [Verse 1], (Chorus), etc.\n- YOU MUST add a single blank line between song sections.\n\nEXAMPLE OF CORRECT FORMATTING:\n[Verse 1]\nNew words for a lonely night\n\n(Chorus)\nA different tune in fading light\n\nALWAYS follow this formatting. Return the result as a JSON object with a single "lyrics" key.`;
             }
             responseSchema = { type: Type.OBJECT, properties: { lyrics: { type: Type.STRING } }, required: ["lyrics"] };
             break;
@@ -600,7 +601,7 @@ ALWAYS follow this formatting. Return the result as a JSON object with a single 
     } finally {
         setIsRegenerating(null);
     }
-  }, [selectedArtistId, artists, songData, callGenerativeAI, generationHistory, updateGenerationHistory, creativity, comment, isInstrumental]);
+  }, [selectedArtistId, artists, songData, callGenerativeAI, generationHistory, updateGenerationHistory, creativity, comment, isInstrumental, language]);
 
 
   return (
@@ -619,9 +620,31 @@ ALWAYS follow this formatting. Return the result as a JSON object with a single 
               {isSuggesting ? <div className="spinner-small"></div> : '💡'}
           </button>
         </div>
-        <div className="instrumental-checkbox">
-            <input type="checkbox" id="instrumental" checked={isInstrumental} onChange={(e) => setIsInstrumental(e.target.checked)} />
-            <label htmlFor="instrumental">Instrumental</label>
+        <div className="options-container">
+            <div className="language-selector">
+                <label htmlFor="language">Language</label>
+                <select 
+                    id="language"
+                    value={language} 
+                    onChange={(e) => setLanguage(e.target.value)} 
+                    disabled={isInstrumental}
+                    aria-label="Select language for lyrics"
+                >
+                    <option value="English">English</option>
+                    <option value="French">French</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="German">German</option>
+                    <option value="Italian">Italian</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Korean">Korean</option>
+                    <option value="Russian">Russian</option>
+                </select>
+            </div>
+            <div className="instrumental-checkbox">
+                <input type="checkbox" id="instrumental" checked={isInstrumental} onChange={(e) => setIsInstrumental(e.target.checked)} />
+                <label htmlFor="instrumental">Instrumental</label>
+            </div>
         </div>
         <div className="creativity-slider-container">
             <label htmlFor="creativity">Creativity Level: <span className="creativity-level-label">{creativityLevels[creativity]}</span></label>

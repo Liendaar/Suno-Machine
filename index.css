@@ -252,10 +252,33 @@ textarea::placeholder {
     opacity: 0.7;
 }
 
+.options-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.language-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.language-selector label {
+    color: var(--text-secondary-color);
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.language-selector select {
+    min-width: 150px;
+}
+
 .instrumental-checkbox {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 0.5rem;
   user-select: none;
 }
